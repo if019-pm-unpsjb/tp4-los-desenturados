@@ -115,7 +115,7 @@ int main()
             FILE *f = fopen(filename, "rb");
             if (!f)
             {
-                perror("No se pudo abrir recibido.txt");
+                perror("No se pudo abrir recibido.txt");//CAMBIAR RECIBIDO.TXT POR LA VARIABLE
                 continue;
             }
             unsigned char data_packet[516]; // 2 bytes opcode + 2 block + 512 datos
