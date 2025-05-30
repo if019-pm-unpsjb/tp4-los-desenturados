@@ -22,12 +22,12 @@ typedef struct {
 typedef struct {
     int sockfd;
     char username[32];
-    int acuerdod;     // 0 = esperando acuerdo, 1 = listo para chat
+    int acuerdod;     // 0 = esperando 1 = listo para chat
 } client_t;
 
 client_t clients[MAX_CLIENTS];
 
-int find_client_by_username(const char *username) {
+int encontrar_cliente_por_nombre(const char *username) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (clients[i].sockfd > 0 && clients[i].acuerdod == 1 &&
             strcmp(clients[i].username, username) == 0)
@@ -36,23 +36,23 @@ int find_client_by_username(const char *username) {
     return -1;
 }
 
-void send_packet(int sockfd, packet_t *pkt) {
+void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(packet_t));
 }
 
 int main() {
-    int listenfd, maxfd, newsockfd, activity, i;
+    int escuchandofd, maxfd, newsockfd, activity, i;
     struct sockaddr_in serv_addr, cli_addr;
     socklen_t clilen;
     fd_set readfds;
 
-    listenfd = socket(AF_INET, SOCK_STREAM, 0);
+    escuchandofd = socket(AF_INET, SOCK_STREAM, 0);
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(PORT);
 
-    bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-    listen(listenfd, 5);
+    bind(escuchandofd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+    listen(escuchandofd, 5);
 
     for (i = 0; i < MAX_CLIENTS; i++) clients[i].sockfd = 0;
 
@@ -60,8 +60,8 @@ int main() {
 
     while (1) {
         FD_ZERO(&readfds);
-        FD_SET(listenfd, &readfds);
-        maxfd = listenfd;
+        FD_SET(escuchandofd, &readfds);
+        maxfd = escuchandofd;
 
         for (i = 0; i < MAX_CLIENTS; i++) {
             int sd = clients[i].sockfd;
@@ -71,9 +71,9 @@ int main() {
 
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
 
-        if (FD_ISSET(listenfd, &readfds)) {
+        if (FD_ISSET(escuchandofd, &readfds)) {
             clilen = sizeof(cli_addr);
-            newsockfd = accept(listenfd, (struct sockaddr *)&cli_addr, &clilen);
+            newsockfd = accept(escuchandofd, (struct sockaddr *)&cli_addr, &clilen);
 
             for (i = 0; i < MAX_CLIENTS; i++) {
                 if (clients[i].sockfd == 0) {
@@ -96,19 +96,19 @@ int main() {
                     close(sd);
                     clients[i].sockfd = 0;
                 } else {
-                    // acuerdo de 3 vías
+                    // aca empieza el 3 vias
                     if (clients[i].acuerdod == 0) {
                         if (pkt.code == SYN) {
                             printf("Recibido SYN de %s\n", pkt.username);
                             strncpy(clients[i].username, pkt.username, 31);
 
-                            // Responde SYN-ACK
+                            // se responde el syn-ack
                             packet_t synack;
                             synack.code = SYN;
                             strncpy(synack.username, "server", 31);
                             strncpy(synack.dest, pkt.username, 31);
                             synack.datalen = 0;
-                            send_packet(sd, &synack);
+                            enviar_paquete(sd, &synack);
                         } else if (pkt.code == ACK) {
                             clients[i].acuerdod = 1;
                             printf("Cliente %s completó acuerdo\n", clients[i].username);
@@ -116,18 +116,18 @@ int main() {
                         continue;
                     }
 
-                    // Procesar paquetes normales
+                    // procesar paquetes mensajes o archivos
                     if (pkt.code == MSG) {
-                        int idx = find_client_by_username(pkt.dest);
+                        int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0) {
                             printf("Mensaje de %s para %s: %s\n", pkt.username, pkt.dest, pkt.data);
-                            send_packet(clients[idx].sockfd, &pkt);
+                            enviar_paquete(clients[idx].sockfd, &pkt);
                         }
                     } else if (pkt.code == FILE) {
-                        int idx = find_client_by_username(pkt.dest);
+                        int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0) {
                             printf("Archivo de %s para %s: %s (%d bytes)\n", pkt.username, pkt.dest, pkt.data, pkt.datalen);
-                            send_packet(clients[idx].sockfd, &pkt);
+                            enviar_paquete(clients[idx].sockfd, &pkt);
                         }
                     } else if (pkt.code == FIN) {
                         printf("Cliente %s pidió FIN\n", pkt.username);
