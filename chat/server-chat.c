@@ -6,15 +6,26 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
+#define MAX_NAME_LEN 32
+#define MAX_CONEXIONES 100
 #define PORT 7777
 #define MAX_CLIENTS 10
 
-enum {SYN = 0, ACK = 1, MSG = 2, FILE = 3, FIN = 4};
+enum {SYN = 0, ACK = 1, MSG = 2, FILE_CODE = 3, FIN = 4};
+
+typedef enum {CONECTADO, BLOQUEADO, PENDIENTE} EstadoConexion;
+
+typedef struct {
+    char usuario1[MAX_NAME_LEN];
+    char usuario2[MAX_NAME_LEN];
+    EstadoConexion estado;
+} Conexion;
+
 
 typedef struct {
     int code;           // codigo del paquete
-    char username[32];  // emisor
-    char dest[32];      // receptor
+    char username[MAX_NAME_LEN];  // emisor
+    char dest[MAX_NAME_LEN];      // receptor
     int datalen;        // long del msg/archivo
     char data[4096];    // msg/Archivo
 } packet_t;
@@ -26,6 +37,8 @@ typedef struct {
 } client_t;
 
 client_t clients[MAX_CLIENTS];
+Conexion conexiones[MAX_CONEXIONES];
+int num_conexiones = 0;
 
 int encontrar_cliente_por_nombre(const char *username) {
     for (int i = 0; i < MAX_CLIENTS; i++) {
@@ -35,6 +48,29 @@ int encontrar_cliente_por_nombre(const char *username) {
     }
     return -1;
 }
+
+void agregar_conexion(const char* u1, const char* u2, EstadoConexion estado) {
+    if (num_conexiones >= MAX_CONEXIONES) {
+        printf("Error: número máximo de conexiones alcanzado.\n");
+        return;
+    }
+
+    strncpy(conexiones[num_conexiones].usuario1, u1, MAX_NAME_LEN);
+    strncpy(conexiones[num_conexiones].usuario2, u2, MAX_NAME_LEN);
+    conexiones[num_conexiones].estado = estado;
+    num_conexiones++;
+}
+
+int buscar_conexion(const char* u1, const char* u2) {
+    for (int i = 0; i < num_conexiones; i++) {
+        if ((strcmp(conexiones[i].usuario1, u1) == 0 && strcmp(conexiones[i].usuario2, u2) == 0) ||
+            (strcmp(conexiones[i].usuario1, u2) == 0 && strcmp(conexiones[i].usuario2, u1) == 0)) {
+            return i;
+        }
+    }
+    return -1; // No encontrada
+}
+
 
 void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(packet_t));
@@ -123,7 +159,7 @@ int main() {
                             printf("Mensaje de %s para %s: %s\n", pkt.username, pkt.dest, pkt.data);
                             enviar_paquete(clients[idx].sockfd, &pkt);
                         }
-                    } else if (pkt.code == FILE) {
+                    } else if (pkt.code == FILE_CODE) {
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0) {
                             printf("Archivo de %s para %s: %s (%d bytes)\n", pkt.username, pkt.dest, pkt.data, pkt.datalen);
