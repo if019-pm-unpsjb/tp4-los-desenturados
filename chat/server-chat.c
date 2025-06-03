@@ -187,7 +187,6 @@ int main()
 
                             printf("Recibido SYN de %s\n", pkt.username);
                             strncpy(clients[i].username, pkt.username, 31);
-
                             // se responde el syn-ack
                             packet_t synack;
                             synack.code = SYN;
