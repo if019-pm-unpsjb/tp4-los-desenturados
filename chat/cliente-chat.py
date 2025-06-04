@@ -7,7 +7,6 @@ import struct
 CODIGO_SYN = 0
 CODIGO_ACK = 1
 CODIGO_MENSAJE = 2
-
 CODIGO_FILE = 3,
 CODIGO_FIN = 4,
 CODIGO_ACEPTADO = 5,
@@ -17,7 +16,6 @@ CODIGO_RECHAZADO = 6
 SERVIDOR = "127.0.0.1"
 PUERTO = 7777
 USUARIO = input("Usuario: ").strip().encode('utf-8')[:32]
-
 
 usuarios_conectados = set()  
 
@@ -34,7 +32,7 @@ def construir_paquete(codigo, usuario=b"", destino=b"", datos=b""):
     longitud_datos = len(datos)
     datos = datos.ljust(4096, b'\x00')[:4096]
 
-    formato_paquete = "i32s32si4096s"
+    formato_paquete = "i32s32si4096s" #buscar para entender
     return struct.pack(formato_paquete, codigo, usuario, destino, longitud_datos, datos)
 
 def realizar_conexion():
@@ -56,7 +54,7 @@ def realizar_conexion():
         # Paso 2: Enviar ACK
         paquete_ack = construir_paquete(CODIGO_ACK, usuario=USUARIO)
         socket_cliente.sendall(paquete_ack)
-        time.sleep(0.2)
+        time.sleep(0.2) #buscar si tiene relevancia
         return True
     else:
         print("[!] Error: se esperaba SYN pero se recibió código", codigo)
@@ -73,7 +71,7 @@ def escuchar_mensajes():
 
             codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
             usuario_emisor = usuario_emisor.decode().strip()
-            mensaje = contenido[:longitud_datos].decode(errors="ignore")
+            mensaje = contenido[:longitud_datos].decode(errors="ignore") #buscar que significa
 
             if codigo == CODIGO_MENSAJE:
                 if usuario_emisor in usuarios_conectados:
@@ -81,7 +79,7 @@ def escuchar_mensajes():
                 else:
                     print(f"\n[*] Nueva solicitud de conexión de '{usuario_emisor}'")
                     opcion = input(f"¿Aceptar conexión de {usuario_emisor}? (aceptar/rechazar): ").strip().lower()
-                    if opcion == "aceptar":
+                    if opcion == "aceptar": #agregar mas formas de escritura
                         # Enviar paquete de aceptación
                         paquete_aceptacion = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO, destino=usuario_emisor)
                         socket_cliente.sendall(paquete_aceptacion)
