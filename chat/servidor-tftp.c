@@ -117,7 +117,7 @@ int main()
             if (!f)
             {
                 perror("No se pudo abrir recibido.txt");
-                sendto(sockfd , (unsigned char *)"\x00\x00\x00\x00", 4, 0)
+                sendto(sockfd , (unsigned char *)"\x00\x00\x00\x00", 4, 0);
                 continue;
             }
             unsigned char data_packet[516]; // 2 bytes opcode + 2 block + 512 datos

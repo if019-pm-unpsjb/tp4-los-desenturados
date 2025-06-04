@@ -8,9 +8,18 @@ CODIGO_SYN = 0
 CODIGO_ACK = 1
 CODIGO_MENSAJE = 2
 
+CODIGO_FILE = 3,
+CODIGO_FIN = 4,
+CODIGO_ACEPTADO = 5,
+CODIGO_RECHAZADO = 6
+
+
 SERVIDOR = "127.0.0.1"
 PUERTO = 7777
 USUARIO = input("Usuario: ").strip().encode('utf-8')[:32]
+
+
+usuarios_conectados = set()  
 
 socket_cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
@@ -60,11 +69,37 @@ def escuchar_mensajes():
             if not datos:
                 print("Servidor desconectado")
                 break
+
+
             codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
+            usuario_emisor = usuario_emisor.decode().strip()
             mensaje = contenido[:longitud_datos].decode(errors="ignore")
-            print(f"[{usuario_emisor.decode().strip()}] {mensaje}")
-        except:
+
+            if codigo == CODIGO_MENSAJE:
+                if usuario_emisor in usuarios_conectados:
+                    print(f"[Mensaje de {usuario_emisor}]: {mensaje}")
+                else:
+                    print(f"\n[*] Nueva solicitud de conexión de '{usuario_emisor}'")
+                    opcion = input(f"¿Aceptar conexión de {usuario_emisor}? (aceptar/rechazar): ").strip().lower()
+                    if opcion == "aceptar":
+                        # Enviar paquete de aceptación
+                        paquete_aceptacion = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO, destino=usuario_emisor)
+                        socket_cliente.sendall(paquete_aceptacion)
+                        usuarios_conectados.add(usuario_emisor)
+                        print(f"[+] Conexión aceptada. Ahora puedes recibir mensajes de {usuario_emisor}")
+                    else:
+                        print(f"[-] Conexión rechazada para {usuario_emisor}")
+                  
+            elif codigo == CODIGO_ACEPTADO:
+                usuarios_conectados.add(usuario_emisor)
+                print(f"{mensaje}")
+            else:
+                print(f"[Código desconocido {codigo} de {usuario_emisor}]: {mensaje}")
+
+        except Exception as e:
+            print(f"[!] Error al recibir mensaje: {e}")
             break
+
 
 if realizar_conexion():
     threading.Thread(target=escuchar_mensajes, daemon=True).start()
@@ -72,8 +107,9 @@ if realizar_conexion():
 
     while True:
         mensaje = input("Mensaje (o 'salir' para cerrar): ")
-        if mensaje.lower() == "salir":
+        if mensaje.lower() == "salir":  
             break
+
 
         destino = input("Enviar a (usuario destino): ").strip().encode('utf-8')[:32]
         mensaje_bytes = mensaje.encode('utf-8')
