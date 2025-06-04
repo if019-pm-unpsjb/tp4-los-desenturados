@@ -210,11 +210,10 @@ int main()
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                         {
-                            int conn_idx = buscar_conexion(pkt.username, pkt.dest);
+                            int conn_idx = buscar_conexion(pkt.username, pkt.dest); //cambiar username por origen, o emisor, y destino por receptor
 
-                            if (conn_idx < 0)
+                            if (conn_idx < 0) //si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
                             {
-                                // No existe conexión, la creamos como pendiente y reenviamos
                                 agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
                                 printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
                                 enviar_paquete(clients[idx].sockfd, &pkt); // se lo mostramos al receptor
