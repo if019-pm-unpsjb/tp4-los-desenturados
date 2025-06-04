@@ -99,8 +99,6 @@ void eliminar_conexiones_de_usuario(const char *username) {
     }
 }
 
-
-
 void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(*pkt));
 }
@@ -125,6 +123,7 @@ void nueva_conexion(int escuchandofd) {
 
 int main()
 {
+
     int escuchandofd, maxfd, newsockfd, activity, i;
     struct sockaddr_in serv_addr, cli_addr;
     socklen_t clilen;
@@ -185,6 +184,7 @@ int main()
                     {
                         if (pkt.code == SYN)
                         {
+
                             printf("Recibido SYN de %s\n", pkt.username);
                             strncpy(clients[i].username, pkt.username, 31);
 
@@ -198,6 +198,7 @@ int main()
                         }
                         else if (pkt.code == ACK)
                         {
+
                             clients[i].acuerdod = 1;
                             printf("Cliente %s completó acuerdo\n", clients[i].username);
                         }
@@ -282,6 +283,7 @@ int main()
                         close(sd);
                         clients[i].sockfd = 0;
                         eliminar_conexiones_de_usuario(pkt.username);
+
                     }
                 }
             }

@@ -7,16 +7,20 @@ import struct
 CODIGO_SYN = 0
 CODIGO_ACK = 1
 CODIGO_MENSAJE = 2
+
 CODIGO_FILE = 3,
 CODIGO_FIN = 4,
 CODIGO_ACEPTADO = 5,
 CODIGO_RECHAZADO = 6
 
+
 SERVIDOR = "127.0.0.1"
 PUERTO = 7777
 USUARIO = input("Usuario: ").strip().encode('utf-8')[:32]
 
+
 usuarios_conectados = set()  
+
 socket_cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
     socket_cliente.connect((SERVIDOR, PUERTO))
@@ -58,8 +62,6 @@ def realizar_conexion():
         print("[!] Error: se esperaba SYN pero se recibió código", codigo)
         return False
 
-
-
 def escuchar_mensajes():
     while True:
         try:
@@ -67,6 +69,7 @@ def escuchar_mensajes():
             if not datos:
                 print("Servidor desconectado")
                 break
+
 
             codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
             usuario_emisor = usuario_emisor.decode().strip()
@@ -106,6 +109,7 @@ if realizar_conexion():
         mensaje = input("Mensaje (o 'salir' para cerrar): ")
         if mensaje.lower() == "salir":  
             break
+
 
         destino = input("Enviar a (usuario destino): ").strip().encode('utf-8')[:32]
         mensaje_bytes = mensaje.encode('utf-8')
