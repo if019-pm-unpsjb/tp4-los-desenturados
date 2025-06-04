@@ -6,6 +6,23 @@
 
 #define PORT 6969
 
+// Enviar paquete de error TFTP
+void send_tftp_error(int sockfd, struct sockaddr_in *cliaddr, socklen_t len,
+                     unsigned short error_code, const char *err_msg)
+{
+    unsigned char pkt[516];
+    size_t msg_len = strlen(err_msg);
+
+    pkt[0] = 0x00;
+    pkt[1] = 0x05;              // Opcode ERROR
+    pkt[2] = 0x00;
+    pkt[3] = error_code;        // Código de error (ver lista)
+    memcpy(&pkt[4], err_msg, msg_len);
+    pkt[4 + msg_len] = 0x00;    // Fin de string
+
+    sendto(sockfd, pkt, 5 + msg_len, 0, (struct sockaddr *)cliaddr, len);
+}
+
 int main()
 {
     int sockfd;
@@ -48,7 +65,7 @@ int main()
         int opcode = (data[0] << 8) | data[1];
 
         if (opcode == 2)
-        { // WRQ
+        { // WRQ (Write Request)
             char filename[100], mode[20];
             strncpy(filename, (char *)&data[2], sizeof(filename) - 1);
             filename[sizeof(filename) - 1] = '\0';
@@ -62,12 +79,12 @@ int main()
             sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
             printf("ACK enviado al cliente (block 0)\n");
 
-            // Abrimos archivo para escribir (sobreescribimos si ya existe)
+            // Intentamos abrir el archivo para escribir
             FILE *f = fopen("recibido.txt", "wb");
             if (!f)
             {
                 perror("No se pudo abrir recibido.txt");
-                
+                send_tftp_error(sockfd, &cliaddr, len, 2, "Violación de acceso");
                 continue;
             }
 
@@ -81,8 +98,9 @@ int main()
                     break;
                 }
 
-                if (opcode == 3)
-                { // DATA
+                int data_opcode = (buffer[0] << 8) | buffer[1];
+                if (data_opcode == 3) // DATA
+                {
                     int block_num = (buffer[2] << 8) | buffer[3];
                     int data_len = n - 4;
                     printf("Recibido DATA, bloque: %d, tamaño: %d bytes\n", block_num, data_len);
@@ -103,11 +121,11 @@ int main()
             fclose(f);
         }
         else if (opcode == 1)
-        { // RRQ
+        { // RRQ (Read Request)
             char filename[100], mode[20];
             strncpy(filename, (char *)&data[2], sizeof(filename) - 1);
             filename[sizeof(filename) - 1] = '\0';
-            
+
             strncpy(mode, (char *)&data[2 + strlen(filename) + 1], sizeof(mode) - 1);
             mode[sizeof(mode) - 1] = '\0';
 
@@ -116,8 +134,8 @@ int main()
             FILE *f = fopen(filename, "rb");
             if (!f)
             {
-                perror("No se pudo abrir recibido.txt");
-                sendto(sockfd , (unsigned char *)"\x00\x00\x00\x00", 4, 0);
+                perror("No se pudo abrir archivo solicitado");
+                send_tftp_error(sockfd, &cliaddr, len, 1, "Archivo no encontrado");
                 continue;
             }
             unsigned char data_packet[516]; // 2 bytes opcode + 2 block + 512 datos
@@ -134,6 +152,7 @@ int main()
                 {
                     perror("Error leyendo archivo");
                     fclose(f);
+                    send_tftp_error(sockfd, &cliaddr, len, 0, "Error indefinido");
                     break;
                 }
                 data_packet[2] = (block_number >> 8) & 0xFF;
@@ -143,14 +162,16 @@ int main()
                 {
                     perror("Error enviando DATA");
                     fclose(f);
+                    send_tftp_error(sockfd, &cliaddr, len, 3, "Disco lleno o límite superado");
                     break;
                 }
                 printf("Enviado bloque %d (%ld bytes)\n", block_number, sent);
-                
+
                 n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
                 if (n < 0)
                 {
                     perror("error paquete ack");
+                    fclose(f);
                     break;
                 }
                 int ack_opcode = (buffer[0] << 8) | buffer[1];
@@ -161,7 +182,7 @@ int main()
                     fclose(f);
                     break;
                 }
-                
+
                 printf("Recibido ACK, bloque: %d\n", ack_block);
                 block_number += 1;
 
@@ -172,6 +193,11 @@ int main()
                     break;
                 }
             }
+        }
+        else
+        {
+            // Cualquier otro opcode es ilegal
+            send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
         }
     }
 
