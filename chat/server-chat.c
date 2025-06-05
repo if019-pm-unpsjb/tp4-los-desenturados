@@ -56,8 +56,10 @@ client_t clients[MAX_CLIENTS];
 Conexion conexiones[MAX_CONEXIONES];
 int num_conexiones = 0;
 
-int encontrar_cliente_por_nombre(const char *username){
-    for (int i = 0; i < MAX_CLIENTS; i++){
+int encontrar_cliente_por_nombre(const char *username)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
         if (clients[i].sockfd > 0 && clients[i].acuerdod == 1 && strcmp(clients[i].username, username) == 0)
             return i;
     }
@@ -77,8 +79,10 @@ void agregar_conexion(const char *u1, const char *u2, EstadoConexion estado)
     num_conexiones++;
 }
 
-int buscar_conexion(const char *u1, const char *u2) {
-    for (int i = 0; i < num_conexiones; i++) {
+int buscar_conexion(const char *u1, const char *u2)
+{
+    for (int i = 0; i < num_conexiones; i++)
+    {
         if ((!strcmp(conexiones[i].usuario1, u1) && !strcmp(conexiones[i].usuario2, u2)) ||
             (!strcmp(conexiones[i].usuario1, u2) && !strcmp(conexiones[i].usuario2, u1)))
             return i;
@@ -86,9 +90,12 @@ int buscar_conexion(const char *u1, const char *u2) {
     return -1;
 }
 
-void eliminar_conexiones_de_usuario(const char *username) {
-    for (int i = 0; i < num_conexiones; i++) {
-        if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username)) {
+void eliminar_conexiones_de_usuario(const char *username)
+{
+    for (int i = 0; i < num_conexiones; i++)
+    {
+        if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
+        {
             printf("Eliminando conexión entre %s y %s\n",
                    conexiones[i].usuario1, conexiones[i].usuario2);
             for (int k = i; k < num_conexiones - 1; k++)
@@ -99,20 +106,23 @@ void eliminar_conexiones_de_usuario(const char *username) {
     }
 }
 
-
-
-void enviar_paquete(int sockfd, packet_t *pkt) {
+void enviar_paquete(int sockfd, packet_t *pkt)
+{
     write(sockfd, pkt, sizeof(*pkt));
 }
 
-void nueva_conexion(int escuchandofd) {
+void nueva_conexion(int escuchandofd)
+{
     struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
     int newsockfd = accept(escuchandofd, (struct sockaddr *)&cli_addr, &clilen);
-    if (newsockfd < 0) return;
+    if (newsockfd < 0)
+        return;
 
-    for (int i = 0; i < MAX_CLIENTS; i++) {
-        if (clients[i].sockfd == 0) {
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (clients[i].sockfd == 0)
+        {
             clients[i].sockfd = newsockfd;
             clients[i].acuerdod = 0;
             clients[i].username[0] = '\0';
@@ -122,12 +132,41 @@ void nueva_conexion(int escuchandofd) {
     }
 }
 
+void imprimir_estado_conexiones()
+{
+    printf("\n=== Estado actual de conexiones ===\n");
+    for (int i = 0; i < MAX_CONEXIONES; i++)
+    {
+        if (strlen(conexiones[i].usuario1) == 0 && strlen(conexiones[i].usuario2) == 0)
+        {
+            // Entrada vacía, ignorar
+            continue;
+        }
+
+        const char *estado_str = "DESCONOCIDO";
+        switch (conexiones[i].estado)
+        {
+        case CONECTADO:
+            estado_str = "CONECTADO";
+            break;
+        case BLOQUEADO:
+            estado_str = "BLOQUEADO";
+            break;
+        case PENDIENTE:
+            estado_str = "PENDIENTE";
+            break;
+        }
+
+        printf("Conexión %d: '%s' <-> '%s' | Estado: %s\n",
+               i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
+    }
+    printf("===================================\n\n");
+}
 
 int main()
 {
-    int escuchandofd, maxfd, newsockfd, activity, i;
-    struct sockaddr_in serv_addr, cli_addr;
-    socklen_t clilen;
+    int escuchandofd, maxfd, activity, i;
+    struct sockaddr_in serv_addr;
     fd_set readfds;
 
     escuchandofd = socket(AF_INET, SOCK_STREAM, 0);
@@ -160,13 +199,19 @@ int main()
 
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
 
+        if (activity < 0)
+        {
+            perror("select");
+            continue;
+        }
+
         if (FD_ISSET(escuchandofd, &readfds))
         {
-           nueva_conexion(escuchandofd);
+            nueva_conexion(escuchandofd);
         }
 
         for (i = 0; i < MAX_CLIENTS; i++)
-        {   
+        {
             int sd = clients[i].sockfd;
             if (sd > 0 && FD_ISSET(sd, &readfds))
             {
@@ -210,11 +255,10 @@ int main()
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                         {
-                            int conn_idx = buscar_conexion(pkt.username, pkt.dest);
+                            int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
 
-                            if (conn_idx < 0)
+                            if (conn_idx < 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
                             {
-                                // No existe conexión, la creamos como pendiente y reenviamos
                                 agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
                                 printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
                                 enviar_paquete(clients[idx].sockfd, &pkt); // se lo mostramos al receptor
@@ -244,15 +288,17 @@ int main()
                             conexiones[conn_idx].estado = CONECTADO;
                             printf("Conexión aceptada entre %s y %s\n", pkt.dest, pkt.username);
 
+                            imprimir_estado_conexiones();
+
                             // Avisar al emisor original (pkt.username) que fue aceptado
-                            int emisor_idx = encontrar_cliente_por_nombre(pkt.username);
+                            int emisor_idx = encontrar_cliente_por_nombre(pkt.dest);
                             if (emisor_idx >= 0)
                             {
                                 packet_t confirm;
                                 confirm.code = ACEPTADO;
-                                strncpy(confirm.username, "server", MAX_NAME_LEN);
-                                strncpy(confirm.dest, pkt.username, MAX_NAME_LEN);
-                                confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),"Conexión aceptada por %s", pkt.dest);
+                                strncpy(confirm.username, pkt.username, MAX_NAME_LEN); // 👈 quien acepta
+                                strncpy(confirm.dest, pkt.dest, MAX_NAME_LEN);         // 👈 quien lo había solicitado
+                                confirm.datalen = snprintf(confirm.data, sizeof(confirm.data), "Conexión aceptada por %s", pkt.username);
                                 enviar_paquete(clients[emisor_idx].sockfd, &confirm);
                             }
                         }
@@ -264,6 +310,7 @@ int main()
                         {
                             conexiones[conn_idx].estado = RECHAZADO;
                             printf("Conexión rechazada entre %s y %s\n", pkt.dest, pkt.username);
+                            imprimir_estado_conexiones();
                         }
                     }
 
