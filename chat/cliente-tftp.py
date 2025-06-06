@@ -28,7 +28,7 @@ WRQ = (2).to_bytes(2, byteorder='big')
 DATA = (3).to_bytes(2, byteorder='big')
 ACK = (4).to_bytes(2, byteorder='big')
 
-# Crear socket UDP
+# Crear socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.settimeout(TIMEOUT)
 
@@ -42,16 +42,19 @@ else:
 # --- REINTENTOS DEL PRIMER PAQUETE ---
 retries = 0
 response_received = False
+server_addr = (server_ip, server_port)
+
 while retries < MAX_RETRIES and not response_received:
-    sock.sendto(request_packet, (server_ip, server_port))
     print(f"Enviado paquete {'RRQ' if operacion == 'read' else 'WRQ'} (intento {retries+1})")
+    sock.sendto(request_packet, server_addr)
+
     try:
-        data, addr = sock.recvfrom(1024)
+        data, server_addr = sock.recvfrom(1024)
         response_received = True
     except socket.timeout:
         print("Timeout esperando respuesta del servidor, reintentando...")
         retries += 1
-
+        
 if not response_received:
     print("No se recibió respuesta del servidor después de 3 intentos. Abandonando.")
     sock.close()
@@ -84,7 +87,8 @@ if operacion == 'write':
                     ack_received = False
 
                     while retries < MAX_RETRIES and not ack_received:
-                        sock.sendto(data_packet, (server_ip, server_port))
+                        sock.sendto(data_packet, server_addr)addr
+
                         print(f"Enviado DATA bloque {block_number} (intento {retries + 1})")
                         try:
                             ack_data, _ = sock.recvfrom(1024)
@@ -126,7 +130,7 @@ elif operacion == "read":
                 f.write(received_data)
                 print(f"Bloque recibido: {block_number} ({len(received_data)} bytes)")
                 ack_packet = ACK + data[2:4]
-                sock.sendto(ack_packet, addr)
+                sock.sendto(ack_packet, server_addr)
 
                 if len(received_data) < 512:
                     print("Fin de la transferencia.")
@@ -135,7 +139,7 @@ elif operacion == "read":
                 retries = 0
                 while retries < MAX_RETRIES:
                     try:
-                        data, addr = sock.recvfrom(1024)
+                        data, server_addr = sock.recvfrom(1024)
                         if len(data) >= 4 and data[1] == 5:
                             # Error recibido
                             error_code = data[3]
