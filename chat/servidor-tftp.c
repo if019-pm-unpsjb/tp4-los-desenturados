@@ -3,6 +3,8 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 #define PORT 6969
 
