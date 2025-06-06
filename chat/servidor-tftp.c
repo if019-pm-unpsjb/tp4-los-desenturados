@@ -256,7 +256,7 @@ int main()
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
-        perror("socket error");
+        perror("socket error (child)");
         exit(1);
     }
 
@@ -326,7 +326,7 @@ int main()
         }
         else
         {
-            // Cualquier otro opcode es ilegal
+            // Paquete desconocido: ignorar o responder error si querés
             send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
         }
     }
