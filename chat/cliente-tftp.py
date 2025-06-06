@@ -17,7 +17,7 @@ if operacion not in ("read", "write"):
     print("Operación inválida, debe ser 'read' o 'write'.")
     exit(1)
 
-filename = input("Nombre del archivo a transferir: ").strip()
+filename = input("Nombre del archivo: ").strip()
 if not filename:
     print("Debés ingresar un nombre de archivo.")
     exit(1)
