@@ -106,8 +106,7 @@ void eliminar_conexiones_de_usuario(const char *username)
     }
 }
 
-void enviar_paquete(int sockfd, packet_t *pkt)
-{
+void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(*pkt));
 }
 
