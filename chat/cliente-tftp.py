@@ -87,7 +87,7 @@ if operacion == 'write':
                     ack_received = False
 
                     while retries < MAX_RETRIES and not ack_received:
-                        sock.sendto(data_packet, server_addr)addr
+                        sock.sendto(data_packet, server_addr)
 
                         print(f"Enviado DATA bloque {block_number} (intento {retries + 1})")
                         try:
@@ -124,7 +124,7 @@ elif operacion == "read":
         block_number = int.from_bytes(data[2:4], byteorder='big')
         received_data = data[4:]
 
-        with open("descarga_" + filename, "wb") as f:
+        with open( "descarga_"+filename, "wb") as f:
             print(f"Recibiendo datos para '{filename}'...")
             while True:
                 f.write(received_data)
