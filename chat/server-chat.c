@@ -70,7 +70,7 @@ void agregar_conexion(const char *u1, const char *u2, EstadoConexion estado)
 {
     if (num_conexiones >= MAX_CONEXIONES)
     {
-        printf("Error: número máximo de conexiones alcanzado.\n");
+        printf("Error: n煤mero m谩ximo de conexiones alcanzado.\n");
         return;
     }
     strncpy(conexiones[num_conexiones].usuario1, u1, MAX_NAME_LEN);
@@ -96,7 +96,7 @@ void eliminar_conexiones_de_usuario(const char *username)
     {
         if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
         {
-            printf("Eliminando conexión entre %s y %s\n",
+            printf("Eliminando conexi贸n entre %s y %s\n",
                    conexiones[i].usuario1, conexiones[i].usuario2);
             for (int k = i; k < num_conexiones - 1; k++)
                 conexiones[k] = conexiones[k + 1];
@@ -125,7 +125,7 @@ void nueva_conexion(int escuchandofd)
             clients[i].sockfd = newsockfd;
             clients[i].acuerdod = 0;
             clients[i].username[0] = '\0';
-            printf("Nuevo cliente conectado (sin acuerdo aún)\n");
+            printf("Nuevo cliente conectado (sin acuerdo a煤n)\n");
             break;
         }
     }
@@ -138,7 +138,7 @@ void imprimir_estado_conexiones()
     {
         if (strlen(conexiones[i].usuario1) == 0 && strlen(conexiones[i].usuario2) == 0)
         {
-            // Entrada vacía, ignorar
+            // Entrada vac铆a, ignorar
             continue;
         }
 
@@ -156,7 +156,7 @@ void imprimir_estado_conexiones()
             break;
         }
 
-        printf("Conexión %d: '%s' <-> '%s' | Estado: %s\n",
+        printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n",
                i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
     }
     printf("===================================\n\n");
@@ -243,7 +243,7 @@ int main()
                         else if (pkt.code == ACK)
                         {
                             clients[i].acuerdod = 1;
-                            printf("Cliente %s completó acuerdo\n", clients[i].username);
+                            printf("Cliente %s complet贸 acuerdo\n", clients[i].username);
                         }
                         continue;
                     }
@@ -259,7 +259,7 @@ int main()
                             if (conn_idx < 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
                             {
                                 agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
-                                printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
+                                printf("Solicitud de conexi贸n de %s a %s\n", pkt.username, pkt.dest);
                                 enviar_paquete(clients[idx].sockfd, &pkt); // se lo mostramos al receptor
                             }
                             else
@@ -274,7 +274,7 @@ int main()
                                     printf("Mensaje descartado (%s -> %s) por estado %s\n",
                                            pkt.username, pkt.dest,
                                            estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE");
-                                    // No se reenvía el mensaje
+                                    // No se reenv铆a el mensaje
                                 }
                             }
                         }
@@ -285,7 +285,7 @@ int main()
                         if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE)
                         {
                             conexiones[conn_idx].estado = CONECTADO;
-                            printf("Conexión aceptada entre %s y %s\n", pkt.dest, pkt.username);
+                            printf("Conexi贸n aceptada entre %s y %s\n", pkt.dest, pkt.username);
 
                             imprimir_estado_conexiones();
 
@@ -295,9 +295,9 @@ int main()
                             {
                                 packet_t confirm;
                                 confirm.code = ACEPTADO;
-                                strncpy(confirm.username, pkt.username, MAX_NAME_LEN); // 👈 quien acepta
-                                strncpy(confirm.dest, pkt.dest, MAX_NAME_LEN);         // 👈 quien lo había solicitado
-                                confirm.datalen = snprintf(confirm.data, sizeof(confirm.data), "Conexión aceptada por %s", pkt.username);
+                                strncpy(confirm.username, pkt.username, MAX_NAME_LEN); // 馃憟 quien acepta
+                                strncpy(confirm.dest, pkt.dest, MAX_NAME_LEN);         // 馃憟 quien lo hab铆a solicitado
+                                confirm.datalen = snprintf(confirm.data, sizeof(confirm.data), "Conexi贸n aceptada por %s", pkt.username);
                                 enviar_paquete(clients[emisor_idx].sockfd, &confirm);
                             }
                         }
@@ -308,7 +308,7 @@ int main()
                         if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE)
                         {
                             conexiones[conn_idx].estado = RECHAZADO;
-                            printf("Conexión rechazada entre %s y %s\n", pkt.dest, pkt.username);
+                            printf("Conexi贸n rechazada entre %s y %s\n", pkt.dest, pkt.username);
                             imprimir_estado_conexiones();
                         }
                     }
@@ -324,7 +324,7 @@ int main()
                     }
                     else if (pkt.code == FIN)
                     {
-                        printf("Cliente %s pidió FIN\n", pkt.username);
+                        printf("Cliente %s pidi贸 FIN\n", pkt.username);
                         close(sd);
                         clients[i].sockfd = 0;
                         eliminar_conexiones_de_usuario(pkt.username);
