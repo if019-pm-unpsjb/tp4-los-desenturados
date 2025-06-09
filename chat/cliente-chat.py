@@ -106,15 +106,35 @@ if realizar_conexion():
 
     while True:
         destino = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip().encode('utf-8')[:32]
-        entrada = input("'Mensaje' para chatear o 'archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
+        entrada = input("'Mensaje' para chatear o '/archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
+        #mandar archivo
+        if (entrada.startswith("/archivo")):
+            if(destino in usuarios_conectados):
+                nombre_archivo= input(f"Ingrese nombre de archivo").strip()
+                try:
+                    with open(nombre_archivo, "rb") as archivo:
+                        print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino}{RESET}")
+                        numero_bloque = 1
 
-        
-        if (entrada.startswith("/archivo")) and (destino in usuarios_conectados):
-            nombre_archivo= input(f"Ingrese nombre de archivo")
-            
-            continue
-        
-        
+                        while True:
+                            datos = archivo.read(4096)
+                            if not datos:
+                                print(f"{VERDE}Archivo enviado correctamente.{RESET}")
+                                break
+                            paquete= construir_paquete(CODIGO_FILE,usuario=USUARIO, destino=destino, datos=datos)
+                            socket_cliente.sendall(paquete)
+                            print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo})")
+                            numero_bloque += 1
+                        print(f"{VERDE}Fin de envio del archivo.{RESET}")
+                except FileNotFoundError:
+                    print(f"{ROJO}[!] El archivo '{nombre_archivo}' no existe{RESET}")
+                except Exception as e:
+                    print(f"{ROJO}[!] Error al enviar archivo: {e}{RESET}")
+                continue
+            else:
+                print(f"{ROJO}[!] no tiene una conexion establecida con el usuario {destino}{RESET}")
+                continue
+
         if entrada.lower() == "salir":
             paquete = construir_paquete(CODIGO_FIN, usuario=USUARIO)
             socket_cliente.sendall(paquete)
