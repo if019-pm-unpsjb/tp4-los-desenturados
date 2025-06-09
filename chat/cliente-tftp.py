@@ -87,7 +87,7 @@ if operacion == 'write':
                     ack_received = False
 
                     while retries < MAX_RETRIES and not ack_received:
-                        sock.sendto(data_packet, server_addr)addr
+                        sock.sendto(data_packet, server_addr)
 
                         print(f"Enviado DATA bloque {block_number} (intento {retries + 1})")
                         try:
