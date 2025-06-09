@@ -20,8 +20,8 @@ AMARILLO = '\033[93m'
 NEGRITA = '\033[1m'
 RESET = '\033[0m'
 
-SERVIDOR = "192.168.0.106"
-PUERTO = 7777
+SERVIDOR = "127.0.0.1"
+PUERTO = 28008
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
 usuarios_conectados = set()  
@@ -115,7 +115,6 @@ if realizar_conexion():
                     with open(nombre_archivo, "rb") as archivo:
                         print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino}{RESET}")
                         numero_bloque = 1
-
                         while True:
                             datos = archivo.read(4096)
                             if not datos:
