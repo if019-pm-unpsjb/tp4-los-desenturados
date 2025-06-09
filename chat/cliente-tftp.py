@@ -88,10 +88,14 @@ if operacion == 'write':
 
                     while retries < MAX_RETRIES and not ack_received:
 <<<<<<< HEAD
+<<<<<<< HEAD
                         sock.sendto(data_packet, server_addr)
 =======
                         sock.sendto(data_packet, server_addr)addr
 >>>>>>> f605e2b (write arreglado tftp1')
+=======
+                        sock.sendto(data_packet, server_addr)
+>>>>>>> bd0a6a8 (agregamos archivos)
 
                         print(f"Enviado DATA bloque {block_number} (intento {retries + 1})")
                         try:
