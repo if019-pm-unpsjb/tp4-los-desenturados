@@ -5,9 +5,15 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/time.h> // Para struct timeval
+
 
 #define PORT 6969
+#define MAX_RETRIES 5
 
+int retries = 0;
+unsigned char last_ack[4];
+int last_block = 0;
 // Enviar paquete de error TFTP
 void send_tftp_error(int sockfd, struct sockaddr_in *cliaddr, socklen_t len,
                      unsigned short error_code, const char *err_msg)
@@ -63,12 +69,44 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
         while (1)
         {
+            fd_set readfds;
+            struct timeval timeout;
+
+            FD_ZERO(&readfds);
+            FD_SET(sockfd, &readfds);
+
+            timeout.tv_sec = 3; // 3 segundos de espera
+            timeout.tv_usec = 0;
+
+            int activity = select(sockfd + 1, &readfds, NULL, NULL, &timeout);
+
+            if (activity < 0)
+            {
+                perror("select error");
+                break;
+            }
+            else if (activity == 0)
+            {
+                // Timeout: reenviar ACK
+                if (retries >= MAX_RETRIES)
+                {
+                    printf("Se alcanzó el máximo de reintentos. Cancelando transferencia.\n");
+                    break;
+                }
+
+                retries++;
+                printf("Timeout (%d/%d). Reenviando ACK del bloque %d\n", retries, MAX_RETRIES, last_block);
+                sendto(sockfd, last_ack, 4, 0, (struct sockaddr *)&cliaddr, len);
+                continue;
+            }
+
             int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
             if (n < 0)
             {
                 perror("recvfrom DATA error");
                 break;
             }
+            retries = 0; // Reset si llega algo
 
             int data_opcode = (buffer[0] << 8) | buffer[1];
             if (data_opcode == 3) // DATA
@@ -79,8 +117,12 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
                 fwrite(&buffer[4], 1, data_len, f);
 
+                last_block = block_num;
+                last_ack[2] = buffer[2];
+                last_ack[3] = buffer[3];
+
                 unsigned char ack_data[4] = {0, 4, buffer[2], buffer[3]};
-                sendto(sockfd, ack_data, 4, 0, (struct sockaddr *)&cliaddr, len);
+                sendto(sockfd, last_ack, 4, 0, (struct sockaddr *)&cliaddr, len);
                 printf("ACK enviado para bloque %d\n", block_num);
 
                 if (data_len < 512)
@@ -106,6 +148,8 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
         int block_number = 1;
         size_t bytes_read;
         ssize_t sent;
+        int retries;
+
         data_packet[0] = 0;
         data_packet[1] = 3; // Opcode DATA
 
@@ -119,35 +163,71 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 send_tftp_error(sockfd, &cliaddr, len, 0, "Error indefinido");
                 break;
             }
+
             data_packet[2] = (block_number >> 8) & 0xFF;
             data_packet[3] = block_number & 0xFF;
-            sent = sendto(sockfd, data_packet, bytes_read + 4, 0, (struct sockaddr *)&cliaddr, len);
-            if (sent < 0)
-            {
-                perror("Error enviando DATA");
-                fclose(f);
-                send_tftp_error(sockfd, &cliaddr, len, 3, "Disco lleno o límite superado");
-                break;
-            }
-            printf("Enviado bloque %d (%ld bytes)\n", block_number, sent);
+            retries = 0;
 
-            int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
-            if (n < 0)
+            while (retries < MAX_RETRIES)
             {
-                perror("error paquete ack");
-                fclose(f);
-                break;
-            }
-            int ack_opcode = (buffer[0] << 8) | buffer[1];
-            int ack_block = (buffer[2] << 8) | buffer[3];
-            if (ack_opcode != 4 || ack_block != block_number)
-            {
-                fprintf(stderr, "ACK inválido: opcode=%d, block=%d\n", ack_opcode, ack_block);
-                fclose(f);
-                break;
-            }
 
-            printf("Recibido ACK, bloque: %d\n", ack_block);
+                sent = sendto(sockfd, data_packet, bytes_read + 4, 0, (struct sockaddr *)&cliaddr, len);
+                if (sent < 0)
+                {
+                    perror("Error enviando DATA");
+                    fclose(f);
+                    send_tftp_error(sockfd, &cliaddr, len, 3, "Disco lleno o límite superado");
+                    break;
+                }
+                printf("Enviado bloque %d (%ld bytes)\n", block_number, sent);
+                fd_set readfds;
+                struct timeval timeout;
+
+                FD_ZERO(&readfds);
+                FD_SET(sockfd, &readfds);
+
+                timeout.tv_sec = 3;
+                timeout.tv_usec = 0;
+                int activity = select(sockfd + 1, &readfds, NULL, NULL, &timeout);
+
+                if (activity < 0)
+                {
+                    perror("select error");
+                    fclose(f);
+                    return;
+                }
+                else if (activity == 0)
+                {
+                    retries++;
+                    printf("Timeout esperando ACK (intento %d/%d). Reenviando bloque %d\n", retries, MAX_RETRIES, block_number);
+                    continue;
+                }
+
+                int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+                if (n < 0)
+                {
+                    perror("error paquete ack");
+                    fclose(f);
+                    return;
+                }
+                int ack_opcode = (buffer[0] << 8) | buffer[1];
+                int ack_block = (buffer[2] << 8) | buffer[3];
+                if (ack_opcode == 4 && ack_block == block_number)
+                {
+                    printf("Recibido ACK, bloque: %d\n", ack_block);
+                    break; // Salir del bucle de reintentos
+                }
+                else
+                {
+                    printf("ACK inválido. Esperado: %d, recibido: %d\n", block_number, ack_block);
+                }
+            }
+            if (retries == MAX_RETRIES)
+            {
+                printf("No se recibió ACK tras %d intentos. Cancelando transferencia.\n", MAX_RETRIES);
+                fclose(f);
+                break;
+            }
             block_number += 1;
 
             if (bytes_read < 512)
@@ -176,7 +256,7 @@ int main()
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
     {
-        perror("socket error");
+        perror("socket error (child)");
         exit(1);
     }
 
@@ -238,6 +318,11 @@ int main()
                 // Nunca vuelve acá
             }
             // PADRE: sigue escuchando
+        }
+        else
+        {
+            // Paquete desconocido: ignorar o responder error si querés
+            send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
         }
         else
         {
