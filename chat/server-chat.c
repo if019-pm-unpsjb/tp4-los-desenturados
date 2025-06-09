@@ -318,8 +318,36 @@ int main()
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                         {
-                            printf("Archivo de %s para %s: %s (%d bytes)\n", pkt.username, pkt.dest, pkt.data, pkt.datalen);
-                            enviar_paquete(clients[idx].sockfd, &pkt);
+                            int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
+                            if (conn_idx > 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
+                            {
+                                EstadoConexion estado = conexiones[conn_idx].estado;
+                                if (estado == CONECTADO)
+                                {
+                                printf("Iniciando transferencia de archivo de %s a %s\n", pkt.username, pkt.dest);
+                                packet_t siguiente_pkt = pkt;
+                                  while (1)
+                                    {
+                                        enviar_paquete(clients[idx].sockfd, &siguiente_pkt);
+                                        int bytes_recibidos = recv(clients[idx].sockfd, &siguiente_pkt, sizeof(siguiente_pkt), 0);
+                                        if (bytes_recibidos < 0)
+                                        {
+                                            perror("recvfrom DATA error");
+                                            break;
+                                        }
+
+                                        if (siguiente_pkt.datalen < sizeof(siguiente_pkt.data))
+                                        {
+                                            printf("Transferencia completada\n");
+                                            break;
+                                        }
+                                    }
+                                }
+                                else if (estado == BLOQUEADO || estado == PENDIENTE)
+                                {
+                                    printf("Mensaje descartado (%s -> %s) por estado %s\n", pkt.username, pkt.dest, estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE"); // No se reenv铆a el mensaje
+                                }
+                            }
                         }
                     }
                     else if (pkt.code == FIN)
