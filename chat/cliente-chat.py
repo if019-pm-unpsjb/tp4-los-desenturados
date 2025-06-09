@@ -88,6 +88,18 @@ def escuchar_mensajes():
                     print(f"\n{VERDE}[Mensaje de {usuario_emisor}]{RESET}: {mensaje}")
                 else:
                     print(f"\n{AZUL}[Solicitud] Conexión de '{usuario_emisor}'. Usá {NEGRITA}/aceptar {usuario_emisor}{RESET}{AZUL} o {NEGRITA}/rechazar {usuario_emisor}{RESET}{AZUL}.{RESET}")
+            
+            #codigo del chat
+            elif codigo == CODIGO_FILE:
+                # Por ejemplo, podrías pedir un nombre de archivo, o generar uno automáticamente
+                nombre_archivo = f"recibido_{usuario_emisor}_{usuario_destino}"
+                try:
+                    with open(nombre_archivo, "ab") as f:
+                        f.write(contenido[:longitud_datos])
+                    print(f"{VERDE}[Archivo] Recibido bloque de {usuario_emisor} para {usuario_destino} ({longitud_datos} bytes). Guardado en {nombre_archivo}.{RESET}")
+                except Exception as e:
+                    print(f"{ROJO}[!] Error al guardar archivo: {e}{RESET}")
+
             elif codigo == CODIGO_ACEPTADO:
                 usuarios_conectados.add(usuario_emisor)
                 print(f"\n{VERDE}[Conexión aceptada] Ya podés chatear con '{usuario_emisor}'.{RESET}")
@@ -105,15 +117,16 @@ if realizar_conexion():
     print(f"{VERDE}[*] Conexión establecida correctamente{RESET}")
 
     while True:
-        destino = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip().encode('utf-8')[:32]
+        destino_str = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip()
+        destino = destino_str.encode('utf-8')[:32]
         entrada = input("'Mensaje' para chatear o '/archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
         #mandar archivo
         if (entrada.startswith("/archivo")):
-            if(destino in usuarios_conectados):
+            if(destino_str in usuarios_conectados):
                 nombre_archivo= input(f"Ingrese nombre de archivo").strip()
                 try:
                     with open(nombre_archivo, "rb") as archivo:
-                        print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino}{RESET}")
+                        print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino_str}{RESET}")
                         numero_bloque = 1
                         while True:
                             datos = archivo.read(4096)
