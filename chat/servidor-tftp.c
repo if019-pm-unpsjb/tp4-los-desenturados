@@ -5,12 +5,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
-<<<<<<< HEAD
 #include <sys/time.h> // Para struct timeval
 
-
-=======
->>>>>>> f605e2b (write arreglado tftp1')
 
 #define PORT 6969
 #define MAX_RETRIES 5
@@ -73,7 +69,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
         while (1)
         {
-<<<<<<< HEAD
             fd_set readfds;
             struct timeval timeout;
 
@@ -105,18 +100,13 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 continue;
             }
 
-=======
->>>>>>> f605e2b (write arreglado tftp1')
             int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
             if (n < 0)
             {
                 perror("recvfrom DATA error");
                 break;
             }
-<<<<<<< HEAD
             retries = 0; // Reset si llega algo
-=======
->>>>>>> f605e2b (write arreglado tftp1')
 
             int data_opcode = (buffer[0] << 8) | buffer[1];
             if (data_opcode == 3) // DATA
@@ -127,17 +117,12 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
                 fwrite(&buffer[4], 1, data_len, f);
 
-<<<<<<< HEAD
                 last_block = block_num;
                 last_ack[2] = buffer[2];
                 last_ack[3] = buffer[3];
 
                 unsigned char ack_data[4] = {0, 4, buffer[2], buffer[3]};
                 sendto(sockfd, last_ack, 4, 0, (struct sockaddr *)&cliaddr, len);
-=======
-                unsigned char ack_data[4] = {0, 4, buffer[2], buffer[3]};
-                sendto(sockfd, ack_data, 4, 0, (struct sockaddr *)&cliaddr, len);
->>>>>>> f605e2b (write arreglado tftp1')
                 printf("ACK enviado para bloque %d\n", block_num);
 
                 if (data_len < 512)
@@ -163,11 +148,8 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
         int block_number = 1;
         size_t bytes_read;
         ssize_t sent;
-<<<<<<< HEAD
         int retries;
 
-=======
->>>>>>> f605e2b (write arreglado tftp1')
         data_packet[0] = 0;
         data_packet[1] = 3; // Opcode DATA
 
@@ -181,7 +163,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 send_tftp_error(sockfd, &cliaddr, len, 0, "Error indefinido");
                 break;
             }
-<<<<<<< HEAD
 
             data_packet[2] = (block_number >> 8) & 0xFF;
             data_packet[3] = block_number & 0xFF;
@@ -247,37 +228,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 fclose(f);
                 break;
             }
-=======
-            data_packet[2] = (block_number >> 8) & 0xFF;
-            data_packet[3] = block_number & 0xFF;
-            sent = sendto(sockfd, data_packet, bytes_read + 4, 0, (struct sockaddr *)&cliaddr, len);
-            if (sent < 0)
-            {
-                perror("Error enviando DATA");
-                fclose(f);
-                send_tftp_error(sockfd, &cliaddr, len, 3, "Disco lleno o límite superado");
-                break;
-            }
-            printf("Enviado bloque %d (%ld bytes)\n", block_number, sent);
-
-            int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
-            if (n < 0)
-            {
-                perror("error paquete ack");
-                fclose(f);
-                break;
-            }
-            int ack_opcode = (buffer[0] << 8) | buffer[1];
-            int ack_block = (buffer[2] << 8) | buffer[3];
-            if (ack_opcode != 4 || ack_block != block_number)
-            {
-                fprintf(stderr, "ACK inválido: opcode=%d, block=%d\n", ack_opcode, ack_block);
-                fclose(f);
-                break;
-            }
-
-            printf("Recibido ACK, bloque: %d\n", ack_block);
->>>>>>> f605e2b (write arreglado tftp1')
             block_number += 1;
 
             if (bytes_read < 512)
@@ -368,19 +318,11 @@ int main()
                 // Nunca vuelve acá
             }
             // PADRE: sigue escuchando
-<<<<<<< HEAD
         }
         else
         {
             // Paquete desconocido: ignorar o responder error si querés
             send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
-        }
-        else
-        {
-            // Paquete desconocido: ignorar o responder error si querés
-            send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
-=======
->>>>>>> f605e2b (write arreglado tftp1')
         }
         else
         {
