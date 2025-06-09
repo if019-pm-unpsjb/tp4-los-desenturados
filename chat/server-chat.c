@@ -8,7 +8,7 @@
 
 #define MAX_NAME_LEN 32
 #define MAX_CONEXIONES 100
-#define PORT 7777
+#define PORT 28008
 #define MAX_CLIENTS 10
 
 enum
