@@ -20,7 +20,7 @@ AMARILLO = '\033[93m'
 NEGRITA = '\033[1m'
 RESET = '\033[0m'
 
-SERVIDOR = "127.0.0.1"
+SERVIDOR = "192.168.0.106"
 PUERTO = 7777
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
@@ -44,7 +44,6 @@ def construir_paquete(codigo, usuario=b"", destino=b"", datos=b""):
 
 def limpiar_nombre(nombre_bytes):
     return nombre_bytes.decode('utf-8').strip('\x00').strip()
-
 
 def realizar_conexion():
     print(f"{AZUL}[*] Iniciando conexion...{RESET}")
@@ -101,14 +100,21 @@ def escuchar_mensajes():
             print(f"{ROJO}[!] Error al recibir mensaje: {e}{RESET}")
             break
 
-
 if realizar_conexion():
     threading.Thread(target=escuchar_mensajes, daemon=True).start()
     print(f"{VERDE}[*] Conexión establecida correctamente{RESET}")
 
     while True:
-        entrada = input("Mensaje o comando (escribí 'salir' para cerrar): ").strip()
+        destino = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip().encode('utf-8')[:32]
+        entrada = input("'Mensaje' para chatear o 'archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
 
+        
+        if (entrada.startswith("/archivo")) and (destino in usuarios_conectados):
+            nombre_archivo= input(f"Ingrese nombre de archivo")
+            
+            continue
+        
+        
         if entrada.lower() == "salir":
             paquete = construir_paquete(CODIGO_FIN, usuario=USUARIO)
             socket_cliente.sendall(paquete)
@@ -122,7 +128,7 @@ if realizar_conexion():
             usuarios_conectados.add(usuario_a_aceptar.decode())
             print(f"{VERDE}[+] Aceptaste la conexión con {usuario_a_aceptar.decode()}{RESET}")
             continue
-
+ 
         elif entrada.startswith("/rechazar "):
             usuario_a_rechazar = entrada.split(maxsplit=1)[1].strip().encode('utf-8')[:32]
             paquete_rechazar = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO, destino=usuario_a_rechazar)
@@ -131,7 +137,6 @@ if realizar_conexion():
             continue
 
         # Si no es comando, se trata como mensaje común
-        destino = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip().encode('utf-8')[:32]
         mensaje_bytes = entrada.encode('utf-8')
         paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO, destino=destino, datos=mensaje_bytes)
         socket_cliente.sendall(paquete)
