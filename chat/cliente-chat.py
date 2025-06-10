@@ -10,8 +10,18 @@ CODIGO_MENSAJE = 2
 CODIGO_FILE = 3
 CODIGO_FIN = 4
 CODIGO_ACEPTADO = 5
+CODIGO_FILE = 3
+CODIGO_FIN = 4
+CODIGO_ACEPTADO = 5
 CODIGO_RECHAZADO = 6
 
+# ANSI colors para mejorar visualización
+ROJO = '\033[91m'
+VERDE = '\033[92m'
+AZUL = '\033[94m'
+AMARILLO = '\033[93m'
+NEGRITA = '\033[1m'
+RESET = '\033[0m'
 # ANSI colors para mejorar visualización
 ROJO = '\033[91m'
 VERDE = '\033[92m'
@@ -23,6 +33,8 @@ RESET = '\033[0m'
 SERVIDOR = "127.0.0.1"
 PUERTO = 28008
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
+PUERTO = 28008
+USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
 usuarios_conectados = set()  
 
@@ -31,12 +43,14 @@ try:
     socket_cliente.connect((SERVIDOR, PUERTO))
 except ConnectionRefusedError:
     print(f"{ROJO}[!] No se pudo conectar al servidor en {SERVIDOR}:{PUERTO}.{RESET}")
+    print(f"{ROJO}[!] No se pudo conectar al servidor en {SERVIDOR}:{PUERTO}.{RESET}")
     exit(1)
 
 def construir_paquete(codigo, usuario=b"", destino=b"", datos=b""):
     usuario = usuario.ljust(32, b'\x00')[:32]
     destino = destino.ljust(32, b'\x00')[:32]
     longitud_datos = len(datos)
+    datos = datos + b'\x00' * (4096 - len(datos)) if len(datos) < 4096 else datos[:4096]
     datos = datos + b'\x00' * (4096 - len(datos)) if len(datos) < 4096 else datos[:4096]
 
     formato_paquete = "i32s32si4096s" #buscar para entender
@@ -58,6 +72,7 @@ def recv_exact(sock, size):
 
 def realizar_conexion():
     print(f"{AZUL}[*] Iniciando conexion...{RESET}")
+    print(f"{AZUL}[*] Iniciando conexion...{RESET}")
 
     # Paso 1: Enviar SYN
     paquete_syn = construir_paquete(CODIGO_SYN, usuario=USUARIO)
@@ -76,12 +91,14 @@ def realizar_conexion():
     codigo, usuario_resp, destino_resp, longitud_datos, datos = struct.unpack("i32s32si4096s", respuesta)
     if codigo == CODIGO_SYN:
         print(f"{VERDE}[*] Recibido ACK{RESET}")
+        print(f"{VERDE}[*] Recibido ACK{RESET}")
         # Paso 2: Enviar ACK
         paquete_ack = construir_paquete(CODIGO_ACK, usuario=USUARIO)
         socket_cliente.sendall(paquete_ack)
         time.sleep(0.2)
         return True
     else:
+        print(f"{ROJO}[!] Se esperaba SYN pero se recibió código {codigo}{RESET}")
         print(f"{ROJO}[!] Se esperaba SYN pero se recibió código {codigo}{RESET}")
         return False
 
@@ -102,6 +119,7 @@ def escuchar_mensajes():
 
             if codigo == CODIGO_MENSAJE:
                 if usuario_emisor in usuarios_conectados:
+                    print(f"\n{VERDE}[Mensaje de {usuario_emisor}]{RESET}: {mensaje}")
                     print(f"\n{VERDE}[Mensaje de {usuario_emisor}]{RESET}: {mensaje}")
                 else:
                     print(f"\n{AZUL}[Solicitud] Conexión de '{usuario_emisor}'. Usá {NEGRITA}/aceptar {usuario_emisor}{RESET}{AZUL} o {NEGRITA}/rechazar {usuario_emisor}{RESET}{AZUL}.{RESET}")
@@ -133,15 +151,21 @@ def escuchar_mensajes():
                 print(f"\n{VERDE}[Conexión aceptada] Ya podés chatear con '{usuario_emisor}'.{RESET}")
                 print(f"[Debug] usuarios_conectados: {usuarios_conectados}")
                 print(f"[Debug] Mensaje de: '{usuario_emisor}'")
+                print(f"\n{VERDE}[Conexión aceptada] Ya podés chatear con '{usuario_emisor}'.{RESET}")
+                print(f"[Debug] usuarios_conectados: {usuarios_conectados}")
+                print(f"[Debug] Mensaje de: '{usuario_emisor}'")
             else:
+                print(f"{AMARILLO}[Código desconocido {codigo} de {usuario_emisor}]{RESET}: {mensaje}")
                 print(f"{AMARILLO}[Código desconocido {codigo} de {usuario_emisor}]{RESET}: {mensaje}")
 
         except Exception as e:
+            print(f"{ROJO}[!] Error al recibir mensaje: {e}{RESET}")
             print(f"{ROJO}[!] Error al recibir mensaje: {e}{RESET}")
             break
 
 if realizar_conexion():
     threading.Thread(target=escuchar_mensajes, daemon=True).start()
+    print(f"{VERDE}[*] Conexión establecida correctamente{RESET}")
     print(f"{VERDE}[*] Conexión establecida correctamente{RESET}")
 
     while True:
@@ -208,8 +232,26 @@ if realizar_conexion():
 
         # Si no es comando, se trata como mensaje común
         mensaje_bytes = entrada.encode('utf-8')
+        elif entrada.startswith("/aceptar "):
+            usuario_a_aceptar = entrada.split(maxsplit=1)[1].strip().encode('utf-8')[:32]
+            paquete_aceptar = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO, destino=usuario_a_aceptar)
+            socket_cliente.sendall(paquete_aceptar)
+            usuarios_conectados.add(usuario_a_aceptar.decode())
+            print(f"{VERDE}[+] Aceptaste la conexión con {usuario_a_aceptar.decode()}{RESET}")
+            continue
+ 
+        elif entrada.startswith("/rechazar "):
+            usuario_a_rechazar = entrada.split(maxsplit=1)[1].strip().encode('utf-8')[:32]
+            paquete_rechazar = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO, destino=usuario_a_rechazar)
+            socket_cliente.sendall(paquete_rechazar)
+            print(f"{ROJO}[-] Rechazaste la conexión con {usuario_a_rechazar.decode()}{RESET}")
+            continue
+
+        # Si no es comando, se trata como mensaje común
+        mensaje_bytes = entrada.encode('utf-8')
         paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO, destino=destino, datos=mensaje_bytes)
         socket_cliente.sendall(paquete)
 else:
+    print(f"{ROJO}[!] Conexión fallida. Cerrando cliente.{RESET}")
     print(f"{ROJO}[!] Conexión fallida. Cerrando cliente.{RESET}")
     socket_cliente.close()
