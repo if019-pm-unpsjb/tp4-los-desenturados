@@ -45,6 +45,17 @@ def construir_paquete(codigo, usuario=b"", destino=b"", datos=b""):
 def limpiar_nombre(nombre_bytes):
     return nombre_bytes.decode('utf-8').strip('\x00').strip()
 
+def recv_exact(sock, size):
+    buffer = b''
+    while len(buffer) < size:
+        parte = sock.recv(size - len(buffer))
+        if not parte:
+            # Conexión cerrada prematuramente
+            return None
+        buffer += parte
+    return buffer
+
+
 def realizar_conexion():
     print(f"{AZUL}[*] Iniciando conexion...{RESET}")
 
@@ -52,33 +63,39 @@ def realizar_conexion():
     paquete_syn = construir_paquete(CODIGO_SYN, usuario=USUARIO)
     socket_cliente.sendall(paquete_syn)
 
-    respuesta = socket_cliente.recv(4196)
-    if len(respuesta) < 4168:
-        print(f"{ROJO}[!] Paquete de respuesta incompleto{RESET}")
+    try:
+        respuesta = recv_exact(socket_cliente, 4168)
+    except ConnectionResetError:
+        print(f"{ROJO}[!] El servidor cerró la conexión abruptamente (reset by peer){RESET}")
         return False
 
-    # Desempaquetar respuesta
+    if respuesta is None:
+        print(f"{ROJO}[!] Conexión cerrada por el servidor{RESET}")
+        return False
+
     codigo, usuario_resp, destino_resp, longitud_datos, datos = struct.unpack("i32s32si4096s", respuesta)
     if codigo == CODIGO_SYN:
         print(f"{VERDE}[*] Recibido ACK{RESET}")
         # Paso 2: Enviar ACK
         paquete_ack = construir_paquete(CODIGO_ACK, usuario=USUARIO)
         socket_cliente.sendall(paquete_ack)
-        time.sleep(0.2) #buscar si tiene relevancia
+        time.sleep(0.2)
         return True
     else:
         print(f"{ROJO}[!] Se esperaba SYN pero se recibió código {codigo}{RESET}")
         return False
 
+
 def escuchar_mensajes():
     while True:
         try:
-            datos = socket_cliente.recv(4196)
-            if not datos:
+            datos = recv_exact(socket_cliente, 4168)
+            if datos is None:
                 print(f"{ROJO}Servidor desconectado{RESET}")
                 break
 
             codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
+
             usuario_emisor = limpiar_nombre(usuario_emisor)
             usuario_destino = limpiar_nombre(usuario_destino)
             mensaje = contenido[:longitud_datos].decode(errors="ignore")#buscar que significa
@@ -91,14 +108,25 @@ def escuchar_mensajes():
             
             #codigo del chat
             elif codigo == CODIGO_FILE:
-                # Por ejemplo, podrías pedir un nombre de archivo, o generar uno automáticamente
-                nombre_archivo = f"recibido_{usuario_emisor}_{usuario_destino}"
-                try:
-                    with open(nombre_archivo, "ab") as f:
-                        f.write(contenido[:longitud_datos])
-                    print(f"{VERDE}[Archivo] Recibido bloque de {usuario_emisor} para {usuario_destino} ({longitud_datos} bytes). Guardado en {nombre_archivo}.{RESET}")
-                except Exception as e:
-                    print(f"{ROJO}[!] Error al guardar archivo: {e}{RESET}")
+                # Primer mensaje: nombre del archivo
+                nombre_archivo = contenido[:longitud_datos].decode(errors="replace")
+                archivo_recibido = f"archivo_de_{usuario_emisor}_{nombre_archivo}"
+                print(f"{AZUL}[←] Recibiendo archivo '{nombre_archivo}' de {usuario_emisor}{RESET}")
+                with open(archivo_recibido, "wb") as f:
+                    while True:
+                        datos_archivo = recv_exact(socket_cliente, 4168)
+                        if datos_archivo is None:
+                            print(f"{ROJO}Conexión cerrada inesperadamente{RESET}")
+                            break
+                        print(f"[Bloque recibido] {longitud_datos} bytes de {usuario_emisor}")
+                        _, _, _, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos_archivo)
+                        f.write(contenido[:longitud_datos]) 
+                        if longitud_datos < 4096: # último bloque recibido
+                            print(f"{VERDE}[✓] Archivo recibido completo: {archivo_recibido}{RESET}")
+                            break
+
+                    else:
+                        print(f"{AMARILLO}[Código desconocido {codigo} de {usuario_emisor}]{RESET}: {mensaje}")
 
             elif codigo == CODIGO_ACEPTADO:
                 usuarios_conectados.add(usuario_emisor)
@@ -127,17 +155,27 @@ if realizar_conexion():
                 try:
                     with open(nombre_archivo, "rb") as archivo:
                         print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino_str}{RESET}")
+                        
+                        nombre_bytes = nombre_archivo.encode("utf-8")
+                        paquete_nombre = construir_paquete(
+                            CODIGO_FILE,
+                            usuario=USUARIO,
+                            destino=destino,
+                            datos=nombre_bytes  # solo el nombre del archivo
+                        )
+                        socket_cliente.sendall(paquete_nombre)
+                        print(f"[→] Nombre del archivo enviado: {nombre_archivo}")
                         numero_bloque = 1
                         while True:
                             datos = archivo.read(4096)
                             if not datos:
                                 print(f"{VERDE}Archivo enviado correctamente.{RESET}")
                                 break
-                            paquete= construir_paquete(CODIGO_FILE,usuario=USUARIO, destino=destino, datos=datos)
+                            paquete = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=datos)
                             socket_cliente.sendall(paquete)
-                            print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo})")
+                            print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo}")
                             numero_bloque += 1
-                        print(f"{VERDE}Fin de envio del archivo.{RESET}")
+                        print(f"{VERDE}Fin de envío del archivo.{RESET}")          
                 except FileNotFoundError:
                     print(f"{ROJO}[!] El archivo '{nombre_archivo}' no existe{RESET}")
                 except Exception as e:

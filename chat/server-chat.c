@@ -83,9 +83,10 @@ int buscar_conexion(const char *u1, const char *u2)
 {
     for (int i = 0; i < num_conexiones; i++)
     {
-        if ((!strcmp(conexiones[i].usuario1, u1) && !strcmp(conexiones[i].usuario2, u2)) ||
-            (!strcmp(conexiones[i].usuario1, u2) && !strcmp(conexiones[i].usuario2, u1)))
-            return i;
+        if ((strncmp(conexiones[i].usuario1, u1, 32) == 0 && strncmp(conexiones[i].usuario2, u2, 32) == 0) ||
+        (strncmp(conexiones[i].usuario1, u2, 32) == 0 && strncmp(conexiones[i].usuario2, u1, 32) == 0))
+        return i;
+
     }
     return -1;
 }
@@ -179,7 +180,7 @@ int main()
     for (i = 0; i < MAX_CLIENTS; i++)
         clients[i].sockfd = 0;
 
-    printf("Servidor de chat iniciado en puerto %d\n", PORT);
+    printf("FUNCIONA Servidor de chat iniciado en puerto %d\n", PORT);
 
     while (1)
     {
@@ -315,33 +316,23 @@ int main()
 
                     else if (pkt.code == FILE_CODE)
                     {
+                        printf("entre al primer if");
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                         {
+                             printf("entre al segundo if");
                             int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
-                            if (conn_idx > 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
+                            printf("id conexion:  %d",conn_idx);
+                            if (conn_idx >= 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
                             {
+                                printf("entre al tercer if");
                                 EstadoConexion estado = conexiones[conn_idx].estado;
                                 if (estado == CONECTADO)
                                 {
                                 printf("Iniciando transferencia de archivo de %s a %s\n", pkt.username, pkt.dest);
-                                packet_t siguiente_pkt = pkt;
-                                  while (1)
-                                    {
-                                        enviar_paquete(clients[idx].sockfd, &siguiente_pkt);
-                                        int bytes_recibidos = recv(clients[idx].sockfd, &siguiente_pkt, sizeof(siguiente_pkt), 0);
-                                        if (bytes_recibidos < 0)
-                                        {
-                                            perror("recvfrom DATA error");
-                                            break;
-                                        }
 
-                                        if (siguiente_pkt.datalen < sizeof(siguiente_pkt.data))
-                                        {
-                                            printf("Transferencia completada\n");
-                                            break;
-                                        }
-                                    }
+                                
+                                enviar_paquete(clients[idx].sockfd, &pkt);
                                 }
                                 else if (estado == BLOQUEADO || estado == PENDIENTE)
                                 {
