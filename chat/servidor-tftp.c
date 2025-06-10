@@ -324,11 +324,6 @@ int main()
             // Paquete desconocido: ignorar o responder error si querés
             send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
         }
-        else
-        {
-            // Paquete desconocido: ignorar o responder error si querés
-            send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
-        }
     }
 
     close(sockfd);
