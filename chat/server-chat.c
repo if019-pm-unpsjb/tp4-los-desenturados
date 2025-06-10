@@ -9,6 +9,7 @@
 #define MAX_NAME_LEN 32
 #define MAX_CONEXIONES 100
 #define PORT 28008
+#define PORT 28008
 #define MAX_CLIENTS 10
 enum
 {
@@ -46,6 +47,10 @@ int num_conexiones = 0;
 int encontrar_cliente_por_nombre(const char *username)
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
+int encontrar_cliente_por_nombre(const char *username)
+{
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
         if (clients[i].sockfd > 0 && clients[i].acuerdod == 1 && strcmp(clients[i].username, username) == 0)
             return i;
     }
@@ -54,17 +59,28 @@ int encontrar_cliente_por_nombre(const char *username)
 void agregar_conexion(const char *u1, const char *u2, EstadoConexion estado)
     if (num_conexiones >= MAX_CONEXIONES)
         printf("Error: n煤mero m谩ximo de conexiones alcanzado.\n");
+
         return;
     strncpy(conexiones[num_conexiones].usuario1, u1, MAX_NAME_LEN);
-    strncpy(conexiones[num_conexiones].usuario2, u2, MAX_NAME_LEN);
+
     conexiones[num_conexiones].estado = estado;
     num_conexiones++;
 int buscar_conexion(const char *u1, const char *u2)
     for (int i = 0; i < num_conexiones; i++)
+
+    {
         if ((strncmp(conexiones[i].usuario1, u1, 32) == 0 && strncmp(conexiones[i].usuario2, u2, 32) == 0) ||
         (strncmp(conexiones[i].usuario1, u2, 32) == 0 && strncmp(conexiones[i].usuario2, u1, 32) == 0))
         return i;
+
+    }
+    return -1;
+}
+
 void eliminar_conexiones_de_usuario(const char *username)
+{
+    for (int i = 0; i < num_conexiones; i++)
+    {
         if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
         {
             printf("Eliminando conexi贸n entre %s y %s\n",
@@ -77,33 +93,56 @@ void eliminar_conexiones_de_usuario(const char *username)
 void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(*pkt));
 void nueva_conexion(int escuchandofd)
+
     struct sockaddr_in cli_addr;
     socklen_t clilen = sizeof(cli_addr);
     int newsockfd = accept(escuchandofd, (struct sockaddr *)&cli_addr, &clilen);
     if (newsockfd < 0)
+        return;
+   
+
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
         if (clients[i].sockfd == 0)
+        {
+  
             clients[i].sockfd = newsockfd;
             clients[i].acuerdod = 0;
             clients[i].username[0] = '\0';
+
             printf("Nuevo cliente conectado (sin acuerdo a煤n)\n");
             break;
 void imprimir_estado_conexiones()
+{
     printf("\n=== Estado actual de conexiones ===\n");
     for (int i = 0; i < MAX_CONEXIONES; i++)
+    {
         if (strlen(conexiones[i].usuario1) == 0 && strlen(conexiones[i].usuario2) == 0)
+        {
             // Entrada vac铆a, ignorar
             continue;
+        }
+
         const char *estado_str = "DESCONOCIDO";
         switch (conexiones[i].estado)
+        {
         case CONECTADO:
             estado_str = "CONECTADO";
+            break;
         case BLOQUEADO:
             estado_str = "BLOQUEADO";
+            break;
         case PENDIENTE:
             estado_str = "PENDIENTE";
+            break;
+        }
+
         printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n",
                i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
+    }
     printf("===================================\n\n");
+}
+
 int main()
     int escuchandofd, maxfd, activity, i;
     struct sockaddr_in serv_addr;
@@ -116,7 +155,10 @@ int main()
     listen(escuchandofd, 5);
     for (i = 0; i < MAX_CLIENTS; i++)
         clients[i].sockfd = 0;
+
+
     printf("FUNCIONA Servidor de chat iniciado en puerto %d\n", PORT);
+
     while (1)
         FD_ZERO(&readfds);
         FD_SET(escuchandofd, &readfds);
@@ -130,8 +172,21 @@ int main()
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
         if (activity < 0)
             perror("select");
+
+            continue;
+        }
+
+      
         if (FD_ISSET(escuchandofd, &readfds))
             nueva_conexion(escuchandofd);
+
+        }
+
+        for (i = 0; i < MAX_CLIENTS; i++)
+        {
+        {
+            int sd = clients[i].sockfd;
+
             if (sd > 0 && FD_ISSET(sd, &readfds))
             {
                 packet_t pkt;
@@ -161,6 +216,9 @@ int main()
                         else if (pkt.code == ACK)
                             clients[i].acuerdod = 1;
                             printf("Cliente %s complet贸 acuerdo\n", clients[i].username);
+
+                        }
+
                         continue;
                     }
                     // procesar paquetes mensajes o archivos
@@ -168,9 +226,12 @@ int main()
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                             int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
+
+                          
                             if (conn_idx < 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
                             {
                                 agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
+                                
                                 printf("Solicitud de conexi贸n de %s a %s\n", pkt.username, pkt.dest);
                                 enviar_paquete(clients[idx].sockfd, &pkt); // se lo mostramos al receptor
                             }
@@ -185,12 +246,19 @@ int main()
                                            pkt.username, pkt.dest,
                                            estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE");
                                     // No se reenv铆a el mensaje
+
+                                }
+                            }
+                        }
+                    }
+
                     else if (pkt.code == ACEPTADO)
                         int conn_idx = buscar_conexion(pkt.dest, pkt.username); // OJO: el que acepta es el receptor, el origen original es pkt.dest
                         if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE)
                             conexiones[conn_idx].estado = CONECTADO;
                             printf("Conexi贸n aceptada entre %s y %s\n", pkt.dest, pkt.username);
                             imprimir_estado_conexiones();
+
                             // Avisar al emisor original (pkt.username) que fue aceptado
                             int emisor_idx = encontrar_cliente_por_nombre(pkt.dest);
                             if (emisor_idx >= 0)
@@ -203,17 +271,36 @@ int main()
                     else if (pkt.code == RECHAZADO)
                             conexiones[conn_idx].estado = RECHAZADO;
                             printf("Conexi贸n rechazada entre %s y %s\n", pkt.dest, pkt.username);
+                            imprimir_estado_conexiones();
+                        }
+                    }
+
                     else if (pkt.code == FILE_CODE)
+                    {
                         printf("entre al primer if");
+                        int idx = encontrar_cliente_por_nombre(pkt.dest);
+                        if (idx >= 0)
+                        {
                              printf("entre al segundo if");
+                            int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
                             printf("id conexion:  %d",conn_idx);
                             if (conn_idx >= 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
+                            {
                                 printf("entre al tercer if");
+                                EstadoConexion estado = conexiones[conn_idx].estado;
+                                if (estado == CONECTADO)
+                                {
                                 printf("Iniciando transferencia de archivo de %s a %s\n", pkt.username, pkt.dest);
+
                                 
                                 enviar_paquete(clients[idx].sockfd, &pkt);
+                                }
+                                else if (estado == BLOQUEADO || estado == PENDIENTE)
+                                {
+
                                     printf("Mensaje descartado (%s -> %s) por estado %s\n", pkt.username, pkt.dest, estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE"); // No se reenv铆a el mensaje
                     else if (pkt.code == FIN)
+                       
                         printf("Cliente %s pidi贸 FIN\n", pkt.username);
                         close(sd);
                         clients[i].sockfd = 0;
