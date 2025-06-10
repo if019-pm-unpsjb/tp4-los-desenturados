@@ -1,48 +1,43 @@
-# Prerequisites
-*.d
+# Ignorar todo por defecto
+*
 
-# Object files
+# Permitir archivos .c, .py y el Makefile
+!*.c
+!*.py
+!Makefile
+
+# Permitir también los directorios (necesario para que git vea los archivos permitidos dentro)
+!*/
+
+# Ignorar archivos comunes no deseados
+*.d
 *.o
 *.ko
 *.obj
 *.elf
-
-# Linker output
 *.ilk
 *.map
 *.exp
-
-# Precompiled Headers
 *.gch
 *.pch
-
-# Libraries
 *.lib
 *.a
 *.la
 *.lo
-
-# Shared objects (inc. Windows DLLs)
 *.dll
 *.so
 *.so.*
 *.dylib
-
-# Executables
 *.exe
 *.out
 *.app
 *.i*86
 *.x86_64
 *.hex
-
-# Debug files
 *.dSYM/
 *.su
 *.idb
 *.pdb
-
-# Kernel Module Compile Results
 *.mod*
 *.cmd
 .tmp_versions/
@@ -50,17 +45,11 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-
-# Backup files
 *~
 *.swp
-
-# HTML, PDF
 *.pdf
 *.htm
 *.html
-
-# zip
 *.zip
 
 # Binarios de los ejercicios
