@@ -21,11 +21,11 @@ NEGRITA = '\033[1m'
 RESET = '\033[0m'
 
 SERVIDOR = "127.0.0.1"
-PUERTO = 28008
+PUERTO = 28009
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
-usuarios_conectados = set()
-
+usuarios_conectados = set()  
+archivos_recibiendo = {}
 socket_cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
     socket_cliente.connect((SERVIDOR, PUERTO))
@@ -120,7 +120,23 @@ def escuchar_mensajes():
                 print(f"\n{VERDE}[Conexión aceptada] Ya podés chatear con '{usuario_emisor}'.{RESET}")
                 print(f"[Debug] usuarios_conectados: {usuarios_conectados}")
                 print(f"[Debug] Mensaje de: '{usuario_emisor}'")
-
+            elif codigo == CODIGO_FILE:
+                # Primer mensaje: nombre del archivo
+                nombre_archivo = contenido[:longitud_datos].decode(errors="replace")
+                archivo_recibido = f"archivo_de_{usuario_emisor}_{nombre_archivo}"
+                print(f"{AZUL}[←] Recibiendo archivo '{nombre_archivo}' de {usuario_emisor}{RESET}")
+                with open(archivo_recibido, "wb") as f:
+                    while True:
+                        datos = socket_cliente.recv(4196)
+                        if not datos:
+                            print(f"{ROJO}Conexión cerrada inesperadamente{RESET}")
+                            break
+                        print(f"[Bloque recibido] {longitud_datos} bytes de {usuario_emisor}")
+                        _, _, _, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
+                        f.write(contenido[:longitud_datos]) 
+                        if longitud_datos < 4096: # último bloque recibido
+                            print(f"{VERDE}[✓] Archivo recibido completo: {archivo_recibido}{RESET}")
+                            break
             else:
                 print(f"{AMARILLO}[Código desconocido {codigo} de {usuario_emisor}]{RESET}: {mensaje}")
 
@@ -135,16 +151,24 @@ if realizar_conexion():
     while True:
         destino_str = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip()
         destino = destino_str.encode('utf-8')[:32]
+        destino_str = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip()
+        destino = destino_str.encode('utf-8')[:32]
         entrada = input("'Mensaje' para chatear o '/archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
-
-        if entrada.startswith("/archivo"):
-            if destino_str in usuarios_conectados:
-                nombre_archivo = input("Ingrese nombre de archivo: ").strip()
+        #mandar archivo
+        if (entrada.startswith("/archivo")):
+            if(destino_str in usuarios_conectados):
+                nombre_archivo= input(f"Ingrese nombre de archivo").strip()
                 try:
                     with open(nombre_archivo, "rb") as archivo:
                         print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino_str}{RESET}")
+                        
                         nombre_bytes = nombre_archivo.encode("utf-8")
-                        paquete_nombre = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=nombre_bytes)
+                        paquete_nombre = construir_paquete(
+                            CODIGO_FILE,
+                            usuario=USUARIO,
+                            destino=destino,
+                            datos=nombre_bytes  # solo el nombre del archivo
+                        )
                         socket_cliente.sendall(paquete_nombre)
                         print(f"[→] Nombre del archivo enviado: {nombre_archivo}")
                         numero_bloque = 1
@@ -154,10 +178,12 @@ if realizar_conexion():
                                 print(f"{VERDE}Archivo enviado correctamente.{RESET}")
                                 break
                             paquete = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=datos)
+                            paquete = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=datos)
                             socket_cliente.sendall(paquete)
                             print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo}")
+                            print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo}")
                             numero_bloque += 1
-                        print(f"{VERDE}Fin de envío del archivo.{RESET}")
+                        print(f"{VERDE}Fin de envío del archivo.{RESET}")          
                 except FileNotFoundError:
                     print(f"{ROJO}[!] El archivo '{nombre_archivo}' no existe{RESET}")
                 except Exception as e:
@@ -180,7 +206,7 @@ if realizar_conexion():
             usuarios_conectados.add(usuario_a_aceptar.decode())
             print(f"{VERDE}[+] Aceptaste la conexión con {usuario_a_aceptar.decode()}{RESET}")
             continue
-
+        
         elif entrada.startswith("/rechazar "):
             usuario_a_rechazar = entrada.split(maxsplit=1)[1].strip().encode('utf-8')[:32]
             paquete_rechazar = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO, destino=usuario_a_rechazar)
