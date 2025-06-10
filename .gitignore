@@ -6,7 +6,7 @@
 !*.py
 !Makefile
 
-# Permitir tambiÃ©n los directorios (necesario para que git vea los archivos permitidos dentro)
+# Permitir también los directorios (necesario para que git vea los archivos permitidos dentro)
 !*/
 
 # Ignorar archivos comunes no deseados
