@@ -187,6 +187,7 @@ if realizar_conexion():
                 try:
                     with open(nombre_archivo, "rb") as archivo:
                         print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino_str}{RESET}")
+                        
                         nombre_bytes = nombre_archivo.encode("utf-8")
                         paquete_nombre = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=nombre_bytes)
 >>>>>>> 7031a38 (push master)
