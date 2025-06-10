@@ -160,6 +160,8 @@ if realizar_conexion():
     while True:
         destino_str = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip()
         destino = destino_str.encode('utf-8')[:32]
+        destino_str = input(f"{NEGRITA}Enviar a (usuario destino) > {RESET}").strip()
+        destino = destino_str.encode('utf-8')[:32]
         entrada = input("'Mensaje' para chatear o '/archivo' para enviar archivo (escribí 'salir' para cerrar): ").strip()
 <<<<<<< HEAD
         #mandar archivo
@@ -185,6 +187,7 @@ if realizar_conexion():
                 try:
                     with open(nombre_archivo, "rb") as archivo:
                         print(f"{AZUL}Enviando archivo {nombre_archivo} a {destino_str}{RESET}")
+                        
                         nombre_bytes = nombre_archivo.encode("utf-8")
                         paquete_nombre = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=nombre_bytes)
 >>>>>>> 7031a38 (push master)
@@ -197,7 +200,9 @@ if realizar_conexion():
                                 print(f"{VERDE}Archivo enviado correctamente.{RESET}")
                                 break
                             paquete = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=datos)
+                            paquete = construir_paquete(CODIGO_FILE, usuario=USUARIO, destino=destino, datos=datos)
                             socket_cliente.sendall(paquete)
+                            print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo}")
                             print(f"Enviado bloque {numero_bloque} del archivo {nombre_archivo}")
                             numero_bloque += 1
 <<<<<<< HEAD
