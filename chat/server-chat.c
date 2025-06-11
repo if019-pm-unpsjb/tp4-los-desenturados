@@ -97,8 +97,7 @@ void eliminar_conexiones_de_usuario(const char *username)
     {
         if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
         {
-            printf("Eliminando conexi贸n entre %s y %s\n",
-                   conexiones[i].usuario1, conexiones[i].usuario2);
+            printf("Eliminando conexi贸n entre %s y %s\n",conexiones[i].usuario1, conexiones[i].usuario2);
             for (int k = i; k < num_conexiones - 1; k++)
                 conexiones[k] = conexiones[k + 1];
             num_conexiones--;
@@ -157,8 +156,7 @@ void imprimir_estado_conexiones()
             break;
         }
 
-        printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n",
-               i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
+        printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n",i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
     }
     printf("===================================\n\n");
 }
@@ -273,8 +271,8 @@ int main()
                                 else if (estado == BLOQUEADO || estado == PENDIENTE)
                                 {
                                     printf("Mensaje descartado (%s -> %s) por estado %s\n",
-                                           pkt.username, pkt.dest,
-                                           estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE");
+                                    pkt.username, pkt.dest,
+                                    estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE");
                                     // No se reenv铆a el mensaje
                                 }
                             }
@@ -320,7 +318,7 @@ int main()
                         int idx = encontrar_cliente_por_nombre(pkt.dest);
                         if (idx >= 0)
                         {
-                             printf("entre al segundo if");
+                            printf("entre al segundo if");
                             int conn_idx = buscar_conexion(pkt.username, pkt.dest); // cambiar username por origen, o emisor, y destino por receptor
                             printf("id conexion:  %d",conn_idx);
                             if (conn_idx >= 0) // si es menor a 0 es porque no encontro la conexion entre los 2 usuarios
