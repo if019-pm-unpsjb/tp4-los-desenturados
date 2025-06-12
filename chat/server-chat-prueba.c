@@ -352,7 +352,7 @@ int main()
 
         if (FD_ISSET(escuchandofd, &readfds))
         {
-            nueva_conexion(escuchandofd)
+            nueva_conexion(escuchandofd);
         }
     }
 
