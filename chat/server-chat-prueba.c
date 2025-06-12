@@ -218,25 +218,37 @@ void* manejar_cliente(void* args) {
             }
 
             case ACEPTADO: {
-                printf("Recibido paquete ACEPTADO\n"); 
+                printf("Recibido paquete ACEPTADO\n");
                 int conn_idx = buscar_conexion(pkt.username, pkt.dest);
-                if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE) {
-                    conexiones[conn_idx].estado = CONECTADO;
-                    printf("Conexión aceptada entre %s y %s\n", pkt.dest, pkt.username);
-                    imprimir_estado_conexiones();
+                if (conn_idx >= 0) {
+                    if (conexiones[conn_idx].estado == PENDIENTE) {
+                        conexiones[conn_idx].estado = CONECTADO;
+                        printf("Conexión aceptada entre %s y %s\n", conexiones[conn_idx].usuario1, conexiones[conn_idx].usuario2);
+                        imprimir_estado_conexiones();
 
-                    int emisor_idx = encontrar_cliente_por_nombre(pkt.dest);
-                    if (emisor_idx >= 0) {
-                        packet_t confirm = { .code = ACEPTADO };
-                        strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
-                        strncpy(confirm.dest, pkt.dest, MAX_NAME_LEN);
-                        confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
-                            "Conexión aceptada por %s", pkt.username);
-                        enviar_paquete(clients[emisor_idx].sockfd, &confirm);
+                        // Enviar confirmación al emisor original
+                        const char* otro_usuario = (strcmp(conexiones[conn_idx].usuario1, pkt.username) == 0)
+                                                    ? conexiones[conn_idx].usuario2
+                                                    : conexiones[conn_idx].usuario1;
+
+                        int emisor_idx = encontrar_cliente_por_nombre(otro_usuario);
+                        if (emisor_idx >= 0) {
+                            packet_t confirm = { .code = ACEPTADO };
+                            strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
+                            strncpy(confirm.dest, otro_usuario, MAX_NAME_LEN);
+                            confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
+                                                    "Conexión aceptada por %s", pkt.username);
+                            enviar_paquete(clients[emisor_idx].sockfd, &confirm);
+                        }
+                    } else {
+                        printf("La conexión ya no está en estado PENDIENTE\n");
                     }
+                } else {
+                    printf("No se encontró conexión entre %s y %s\n", pkt.username, pkt.dest);
                 }
                 break;
             }
+
 
             case RECHAZADO: {
                 int conn_idx = buscar_conexion(pkt.dest, pkt.username);
@@ -322,7 +334,7 @@ int main()
     for (int i = 0; i < MAX_CLIENTS; i++)
         clients[i].sockfd = 0;
 
-    printf("FUNCIONA Servidor de chat iniciado en puerto %d\n", PORT);
+    printf("Servidor de chat iniciado en puerto %d\n", PORT);
 
     while (1)
     {
@@ -340,7 +352,7 @@ int main()
 
         if (FD_ISSET(escuchandofd, &readfds))
         {
-            nueva_conexion(escuchandofd);  // esto crea el hilo
+            nueva_conexion(escuchandofd)
         }
     }
 
