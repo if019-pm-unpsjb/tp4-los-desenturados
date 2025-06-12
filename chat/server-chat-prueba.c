@@ -122,38 +122,10 @@ void enviar_paquete(int sockfd, packet_t *pkt) {
     write(sockfd, pkt, sizeof(*pkt));
 }
 
-void* manejar_cliente(void* args);
+/* void* manejar_cliente(void* args); */
 
 
 
-void nueva_conexion(int escuchandofd)
-{
-    struct sockaddr_in cli_addr;
-    socklen_t clilen = sizeof(cli_addr);
-    int newsockfd = accept(escuchandofd, (struct sockaddr *)&cli_addr, &clilen);
-    if (newsockfd < 0)
-        return;
-
-    for (int i = 0; i < MAX_CLIENTS; i++)
-    {
-        if (clients[i].sockfd == 0)
-        {
-            clients[i].sockfd = newsockfd;
-            clients[i].acuerdod = 0;
-            clients[i].username[0] = '\0';
-
-            thread_args_t* args = malloc(sizeof(thread_args_t));
-            args->client_idx = i;
-
-            pthread_t hilo;
-            pthread_create(&hilo, NULL, manejar_cliente, args);
-            pthread_detach(hilo);
-
-            printf("Nuevo cliente conectado y manejado por hilo.\n");
-            break;
-        }
-    }
-}
 
 void imprimir_estado_conexiones()
 {
@@ -190,9 +162,9 @@ void* manejar_cliente(void* args) {
     int client_idx = targs->client_idx;
     free(targs);
 
+    printf("[DEBUG] ENTRE AL MANEJAR CLIENTE");
     int sd = clients[client_idx].sockfd;
     packet_t pkt;
-
     while (1) {
         int n = read(sd, &pkt, sizeof(pkt));
         if (n <= 0) {
@@ -202,7 +174,7 @@ void* manejar_cliente(void* args) {
             eliminar_conexiones_de_usuario(clients[client_idx].username);
             break;
         }
-
+        printf("[DEBUG] INICIAL Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
         // Manejo de handshake inicial
         if (clients[client_idx].acuerdod == 0) {
             if (pkt.code == SYN) {
@@ -219,6 +191,7 @@ void* manejar_cliente(void* args) {
             }
             continue;
         }
+        printf("[DEBUG] ANTES SWITCH Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
 
         // Procesar paquetes
         switch (pkt.code) {
@@ -245,25 +218,37 @@ void* manejar_cliente(void* args) {
             }
 
             case ACEPTADO: {
-                printf("Recibido paquete ACEPTADO\n"); 
-                int conn_idx = buscar_conexion(pkt.dest, pkt.username);
-                if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE) {
-                    conexiones[conn_idx].estado = CONECTADO;
-                    printf("Conexión aceptada entre %s y %s\n", pkt.dest, pkt.username);
-                    imprimir_estado_conexiones();
+                printf("Recibido paquete ACEPTADO\n");
+                int conn_idx = buscar_conexion(pkt.username, pkt.dest);
+                if (conn_idx >= 0) {
+                    if (conexiones[conn_idx].estado == PENDIENTE) {
+                        conexiones[conn_idx].estado = CONECTADO;
+                        printf("Conexión aceptada entre %s y %s\n", conexiones[conn_idx].usuario1, conexiones[conn_idx].usuario2);
+                        imprimir_estado_conexiones();
 
-                    int emisor_idx = encontrar_cliente_por_nombre(pkt.dest);
-                    if (emisor_idx >= 0) {
-                        packet_t confirm = { .code = ACEPTADO };
-                        strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
-                        strncpy(confirm.dest, pkt.dest, MAX_NAME_LEN);
-                        confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
-                            "Conexión aceptada por %s", pkt.username);
-                        enviar_paquete(clients[emisor_idx].sockfd, &confirm);
+                        // Enviar confirmación al emisor original
+                        const char* otro_usuario = (strcmp(conexiones[conn_idx].usuario1, pkt.username) == 0)
+                                                    ? conexiones[conn_idx].usuario2
+                                                    : conexiones[conn_idx].usuario1;
+
+                        int emisor_idx = encontrar_cliente_por_nombre(otro_usuario);
+                        if (emisor_idx >= 0) {
+                            packet_t confirm = { .code = ACEPTADO };
+                            strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
+                            strncpy(confirm.dest, otro_usuario, MAX_NAME_LEN);
+                            confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
+                                                    "Conexión aceptada por %s", pkt.username);
+                            enviar_paquete(clients[emisor_idx].sockfd, &confirm);
+                        }
+                    } else {
+                        printf("La conexión ya no está en estado PENDIENTE\n");
                     }
+                } else {
+                    printf("No se encontró conexión entre %s y %s\n", pkt.username, pkt.dest);
                 }
                 break;
             }
+
 
             case RECHAZADO: {
                 int conn_idx = buscar_conexion(pkt.dest, pkt.username);
@@ -304,10 +289,37 @@ void* manejar_cliente(void* args) {
 }
 
 
+void nueva_conexion(int escuchandofd)
+{
+    struct sockaddr_in cli_addr;
+    socklen_t clilen = sizeof(cli_addr);
+    int newsockfd = accept(escuchandofd, (struct sockaddr *)&cli_addr, &clilen);
+    if (newsockfd < 0)
+        return;
 
+    for (int i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (clients[i].sockfd == 0)
+        {
+            clients[i].sockfd = newsockfd;
+            clients[i].acuerdod = 0;
+            clients[i].username[0] = '\0';
+
+            thread_args_t* args = malloc(sizeof(thread_args_t));
+            args->client_idx = i;
+
+            pthread_t hilo;
+            pthread_create(&hilo, NULL, manejar_cliente, args);
+            pthread_detach(hilo);
+            printf("[DEBUG] HILO CREADO PARA CLIENTE %d\n", i);
+            printf("Nuevo cliente conectado y manejado por hilo.\n");
+            break;
+        }
+    }
+}
 int main()
 {
-    int escuchandofd, maxfd, activity, i;
+    int escuchandofd, maxfd, activity;
     struct sockaddr_in serv_addr;
     fd_set readfds;
 
@@ -319,25 +331,16 @@ int main()
     bind(escuchandofd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     listen(escuchandofd, 5);
 
-    for (i = 0; i < MAX_CLIENTS; i++)
+    for (int i = 0; i < MAX_CLIENTS; i++)
         clients[i].sockfd = 0;
 
-    printf("FUNCIONA Servidor de chat iniciado en puerto %d\n", PORT);
+    printf("Servidor de chat iniciado en puerto %d\n", PORT);
 
     while (1)
     {
         FD_ZERO(&readfds);
         FD_SET(escuchandofd, &readfds);
         maxfd = escuchandofd;
-
-        for (i = 0; i < MAX_CLIENTS; i++)
-        {
-            int sd = clients[i].sockfd;
-            if (sd > 0)
-                FD_SET(sd, &readfds);
-            if (sd > maxfd)
-                maxfd = sd;
-        }
 
         activity = select(maxfd + 1, &readfds, NULL, NULL, NULL);
 
@@ -351,53 +354,7 @@ int main()
         {
             nueva_conexion(escuchandofd);
         }
-
-        for (i = 0; i < MAX_CLIENTS; i++)
-        {
-            int sd = clients[i].sockfd;
-            if (sd > 0 && FD_ISSET(sd, &readfds))
-            {
-                packet_t pkt;
-                int n = read(sd, &pkt, sizeof(pkt));
-                if (n <= 0)
-                {
-                    printf("Cliente %s desconectado\n", clients[i].username);
-                    close(sd);
-                    clients[i].sockfd = 0;
-                    continue;
-                }
-
-                // Manejo del acuerdo de conexión
-                if (clients[i].acuerdod == 0)
-                {
-                    if (pkt.code == SYN)
-                    {
-                        printf("Recibido SYN de %s\n", pkt.username);
-                        strncpy(clients[i].username, pkt.username, 31);
-
-                        packet_t synack;
-                        synack.code = SYN;
-                        strncpy(synack.username, "server", 31);
-                        strncpy(synack.dest, pkt.username, 31);
-                        synack.datalen = 0;
-                        enviar_paquete(sd, &synack);
-                    }
-                    else if (pkt.code == ACK)
-                    {
-                        clients[i].acuerdod = 1;
-                        printf("Cliente %s completó acuerdo\n", clients[i].username);
-                    }
-                    continue;
-                }
-
-                 // Lanzar hilo para manejar paquete
-                pthread_t hilo;
-                thread_args_t* args = malloc(sizeof(thread_args_t));
-                args->client_idx = i;
-                //args->pkt = pkt;
-                pthread_create(&hilo, NULL, manejar_cliente, args);
-                pthread_detach(hilo);
-            }
-        }
     }
+
+    return 0;
 }

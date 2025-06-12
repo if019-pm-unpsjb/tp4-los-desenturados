@@ -20,7 +20,7 @@ AMARILLO = '\033[93m'
 NEGRITA = '\033[1m'
 RESET = '\033[0m'
 
-SERVIDOR = "132.255.7.157"
+SERVIDOR = "127.0.0.1"
 PUERTO = 28008
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
@@ -54,8 +54,6 @@ def recv_exact(sock, size):
             return None
         buffer += parte
     return buffer
-
-
 def realizar_conexion():
     print(f"{AZUL}[*] Iniciando conexion...{RESET}")
 
@@ -80,6 +78,8 @@ def realizar_conexion():
         paquete_ack = construir_paquete(CODIGO_ACK, usuario=USUARIO)
         socket_cliente.sendall(paquete_ack)
         time.sleep(0.2)
+
+        # NO ENVIAMOS MENSAJE A UNO MISMO, evitamos comportamiento inesperado
         return True
     else:
         print(f"{ROJO}[!] Se esperaba SYN pero se recibió código {codigo}{RESET}")
