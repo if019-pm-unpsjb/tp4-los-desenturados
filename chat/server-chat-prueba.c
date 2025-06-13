@@ -36,6 +36,8 @@ typedef struct
     char usuario1[MAX_NAME_LEN];
     char usuario2[MAX_NAME_LEN];
     EstadoConexion estado;
+    time_t timestamp;
+    char bloqueador[MAX_NAME_LEN];
 } Conexion;
 
 typedef struct
@@ -59,10 +61,10 @@ typedef struct
     packet_t pkt;
 } thread_args_t; */
 
-typedef struct {
+typedef struct
+{
     int client_idx;
 } thread_args_t;
-
 
 client_t clients[MAX_CLIENTS];
 Conexion conexiones[MAX_CONEXIONES];
@@ -85,6 +87,7 @@ void agregar_conexion(const char *u1, const char *u2, EstadoConexion estado)
         printf("Error: n煤mero m谩ximo de conexiones alcanzado.\n");
         return;
     }
+    conexiones[num_conexiones].timestamp = time(NULL); // ahora
     strncpy(conexiones[num_conexiones].usuario1, u1, MAX_NAME_LEN);
     strncpy(conexiones[num_conexiones].usuario2, u2, MAX_NAME_LEN);
     conexiones[num_conexiones].estado = estado;
@@ -96,9 +99,8 @@ int buscar_conexion(const char *u1, const char *u2)
     for (int i = 0; i < num_conexiones; i++)
     {
         if ((strncmp(conexiones[i].usuario1, u1, 32) == 0 && strncmp(conexiones[i].usuario2, u2, 32) == 0) ||
-        (strncmp(conexiones[i].usuario1, u2, 32) == 0 && strncmp(conexiones[i].usuario2, u1, 32) == 0))
-        return i;
-
+            (strncmp(conexiones[i].usuario1, u2, 32) == 0 && strncmp(conexiones[i].usuario2, u1, 32) == 0))
+            return i;
     }
     return -1;
 }
@@ -109,7 +111,7 @@ void eliminar_conexiones_de_usuario(const char *username)
     {
         if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
         {
-            printf("Eliminando conexi贸n entre %s y %s\n",conexiones[i].usuario1, conexiones[i].usuario2);
+            printf("Eliminando conexi贸n entre %s y %s\n", conexiones[i].usuario1, conexiones[i].usuario2);
             for (int k = i; k < num_conexiones - 1; k++)
                 conexiones[k] = conexiones[k + 1];
             num_conexiones--;
@@ -118,14 +120,12 @@ void eliminar_conexiones_de_usuario(const char *username)
     }
 }
 
-void enviar_paquete(int sockfd, packet_t *pkt) {
+void enviar_paquete(int sockfd, packet_t *pkt)
+{
     write(sockfd, pkt, sizeof(*pkt));
 }
 
 /* void* manejar_cliente(void* args); */
-
-
-
 
 void imprimir_estado_conexiones()
 {
@@ -151,23 +151,29 @@ void imprimir_estado_conexiones()
             estado_str = "PENDIENTE";
             break;
         }
-
-        printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n",i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
+        time_t ahora = time(NULL);
+        double minutos = difftime(ahora, conexiones[i].timestamp) / 60.0;
+        printf("Conexión %d: '%s' <-> '%s' | Estado: %s | Tiempo: %.1f min\n",
+               i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str, minutos);
+        // printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n", i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
     }
     printf("===================================\n\n");
 }
- 
-void* manejar_cliente(void* args) {
-    thread_args_t* targs = (thread_args_t*) args;
+
+void *manejar_cliente(void *args)
+{
+    thread_args_t *targs = (thread_args_t *)args;
     int client_idx = targs->client_idx;
     free(targs);
 
     printf("[DEBUG] ENTRE AL MANEJAR CLIENTE");
     int sd = clients[client_idx].sockfd;
     packet_t pkt;
-    while (1) {
+    while (1)
+    {
         int n = read(sd, &pkt, sizeof(pkt));
-        if (n <= 0) {
+        if (n <= 0)
+        {
             printf("Cliente %s desconectado\n", clients[client_idx].username);
             close(sd);
             clients[client_idx].sockfd = 0;
@@ -176,16 +182,20 @@ void* manejar_cliente(void* args) {
         }
         printf("[DEBUG] INICIAL Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
         // Manejo de handshake inicial
-        if (clients[client_idx].acuerdod == 0) {
-            if (pkt.code == SYN) {
+        if (clients[client_idx].acuerdod == 0)
+        {
+            if (pkt.code == SYN)
+            {
                 printf("Recibido SYN de %s\n", pkt.username);
                 strncpy(clients[client_idx].username, pkt.username, MAX_NAME_LEN);
-                packet_t synack = { .code = SYN };
+                packet_t synack = {.code = SYN};
                 strncpy(synack.username, "server", MAX_NAME_LEN);
                 strncpy(synack.dest, pkt.username, MAX_NAME_LEN);
                 synack.datalen = 0;
                 enviar_paquete(sd, &synack);
-            } else if (pkt.code == ACK) {
+            }
+            else if (pkt.code == ACK)
+            {
                 clients[client_idx].acuerdod = 1;
                 printf("Cliente %s completó acuerdo\n", clients[client_idx].username);
             }
@@ -194,100 +204,157 @@ void* manejar_cliente(void* args) {
         printf("[DEBUG] ANTES SWITCH Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
 
         // Procesar paquetes
-        switch (pkt.code) {
-            case MSG: {
-                int idx = encontrar_cliente_por_nombre(pkt.dest);
-                if (idx >= 0) {
-                    int conn_idx = buscar_conexion(pkt.username, pkt.dest);
-                    if (conn_idx < 0) {
-                        agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
-                        printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
-                        enviar_paquete(clients[idx].sockfd, &pkt);
-                    } else {
-                        EstadoConexion estado = conexiones[conn_idx].estado;
-                        if (estado == CONECTADO) {
-                            enviar_paquete(clients[idx].sockfd, &pkt);
-                        } else {
-                            printf("Mensaje descartado (%s -> %s) por estado %s\n",
-                                pkt.username, pkt.dest,
-                                estado == BLOQUEADO ? "BLOQUEADO" : "PENDIENTE");
-                        }
-                    }
-                }
-                break;
-            }
-
-            case ACEPTADO: {
-                printf("Recibido paquete ACEPTADO\n");
+        switch (pkt.code)
+        {
+        case MSG:
+        {
+            int idx = encontrar_cliente_por_nombre(pkt.dest);
+            if (idx >= 0)
+            {
                 int conn_idx = buscar_conexion(pkt.username, pkt.dest);
-                if (conn_idx >= 0) {
-                    if (conexiones[conn_idx].estado == PENDIENTE) {
-                        conexiones[conn_idx].estado = CONECTADO;
-                        printf("Conexión aceptada entre %s y %s\n", conexiones[conn_idx].usuario1, conexiones[conn_idx].usuario2);
-                        imprimir_estado_conexiones();
-
-                        // Enviar confirmación al emisor original
-                        const char* otro_usuario = (strcmp(conexiones[conn_idx].usuario1, pkt.username) == 0)
-                                                    ? conexiones[conn_idx].usuario2
-                                                    : conexiones[conn_idx].usuario1;
-
-                        int emisor_idx = encontrar_cliente_por_nombre(otro_usuario);
-                        if (emisor_idx >= 0) {
-                            packet_t confirm = { .code = ACEPTADO };
-                            strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
-                            strncpy(confirm.dest, otro_usuario, MAX_NAME_LEN);
-                            confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
-                                                    "Conexión aceptada por %s", pkt.username);
-                            enviar_paquete(clients[emisor_idx].sockfd, &confirm);
-                        }
-                    } else {
-                        printf("La conexión ya no está en estado PENDIENTE\n");
-                    }
-                } else {
-                    printf("No se encontró conexión entre %s y %s\n", pkt.username, pkt.dest);
+                if (conn_idx < 0)
+                {
+                    // No hay conexión previa: crear una nueva
+                    agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
+                    printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
+                    enviar_paquete(clients[idx].sockfd, &pkt);
                 }
-                break;
-            }
+                else
+                {
+                    EstadoConexion estado = conexiones[conn_idx].estado;
 
-
-            case RECHAZADO: {
-                int conn_idx = buscar_conexion(pkt.dest, pkt.username);
-                if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE) {
-                    conexiones[conn_idx].estado = RECHAZADO;
-                    printf("Conexión rechazada entre %s y %s\n", pkt.dest, pkt.username);
-                    imprimir_estado_conexiones();
-                }
-                break;
-            }
-
-            case FILE_CODE: {
-                int idx = encontrar_cliente_por_nombre(pkt.dest);
-                if (idx >= 0) {
-                    int conn_idx = buscar_conexion(pkt.username, pkt.dest);
-                    if (conn_idx >= 0 && conexiones[conn_idx].estado == CONECTADO) {
-                        printf("Enviando archivo de %s a %s\n", pkt.username, pkt.dest);
+                    if (estado == CONECTADO)
+                    {
                         enviar_paquete(clients[idx].sockfd, &pkt);
-                    } else {
-                        printf("Archivo descartado (%s -> %s) por estado no válido\n",
-                            pkt.username, pkt.dest);
+                    }
+                    else if (estado == BLOQUEADO)
+                    {
+                        if (strcmp(conexiones[conn_idx].bloqueador, pkt.username) == 0)
+                        {
+                            // El bloqueador quiere retomar: permitir
+                            conexiones[conn_idx].estado = PENDIENTE;
+                            conexiones[conn_idx].timestamp = time(NULL);
+                            printf("El bloqueador %s reinició conexión con %s\n", pkt.username, pkt.dest);
+                            enviar_paquete(clients[idx].sockfd, &pkt);
+                        }
+                        else
+                        {
+                            printf("Conexión bloqueada: %s no puede iniciar con %s\n", pkt.username, pkt.dest);
+                        }
+                    }
+                    else
+                    {
+                        printf("Mensaje descartado (%s -> %s) por estado PENDIENTE\n", pkt.username, pkt.dest);
                     }
                 }
-                break;
             }
+            break;
+        }
 
-            case FIN: {
-                printf("Cliente %s pidió FIN\n", pkt.username);
-                close(sd);
-                clients[client_idx].sockfd = 0;
-                eliminar_conexiones_de_usuario(pkt.username);
-                pthread_exit(NULL);
+        case ACEPTADO:
+        {
+            printf("Recibido paquete ACEPTADO\n");
+
+            int conn_idx = buscar_conexion(pkt.username, pkt.dest);
+            if (conn_idx >= 0)
+            {
+                // Acepta si hay una conexión pendiente donde el otro usuario fue el solicitante
+                if (conexiones[conn_idx].estado == PENDIENTE)
+                {
+                    conexiones[conn_idx].estado = CONECTADO;
+                    conexiones[conn_idx].timestamp = time(NULL);
+
+                    const char *otro_usuario = (strcmp(conexiones[conn_idx].usuario1, pkt.username) == 0)
+                                                   ? conexiones[conn_idx].usuario2
+                                                   : conexiones[conn_idx].usuario1;
+
+                    printf("Conexión aceptada entre %s y %s\n",
+                           conexiones[conn_idx].usuario1, conexiones[conn_idx].usuario2);
+                    imprimir_estado_conexiones();
+
+                    // Notificar a quien envió la solicitud
+                    int idx_otro = encontrar_cliente_por_nombre(otro_usuario);
+                    if (idx_otro >= 0)
+                    {
+                        packet_t confirm = {.code = ACEPTADO};
+                        strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
+                        strncpy(confirm.dest, otro_usuario, MAX_NAME_LEN);
+                        confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
+                                                   "Conexión aceptada por %s", pkt.username);
+                        enviar_paquete(clients[idx_otro].sockfd, &confirm);
+                    }
+
+                    // Confirmación opcional para quien aceptó
+                    int idx_yo = encontrar_cliente_por_nombre(pkt.username);
+                    if (idx_yo >= 0)
+                    {
+                        packet_t conf = {.code = ACEPTADO};
+                        strncpy(conf.username, otro_usuario, MAX_NAME_LEN);
+                        strncpy(conf.dest, pkt.username, MAX_NAME_LEN);
+                        conf.datalen = snprintf(conf.data, sizeof(conf.data),
+                                                "Conexión con %s establecida correctamente", otro_usuario);
+                        enviar_paquete(clients[idx_yo].sockfd, &conf);
+                    }
+                }
+                else
+                {
+                    printf("La conexión ya no está en estado PENDIENTE\n");
+                }
             }
+            else
+            {
+                printf("No se encontró conexión entre %s y %s\n", pkt.username, pkt.dest);
+            }
+            break;
+        }
+
+        case RECHAZADO:
+        {
+            int conn_idx = buscar_conexion(pkt.dest, pkt.username);
+            if (conn_idx >= 0 && conexiones[conn_idx].estado == PENDIENTE)
+            {
+                conexiones[conn_idx].estado = BLOQUEADO;
+                conexiones[conn_idx].timestamp = time(NULL);
+                strncpy(conexiones[conn_idx].bloqueador, pkt.username, MAX_NAME_LEN); // quien rechazó
+                printf("Conexión rechazada (marcada como BLOQUEADO) entre %s y %s\n", pkt.dest, pkt.username);
+                imprimir_estado_conexiones();
+            }
+            break;
+        }
+
+        case FILE_CODE:
+        {
+            int idx = encontrar_cliente_por_nombre(pkt.dest);
+            if (idx >= 0)
+            {
+                int conn_idx = buscar_conexion(pkt.username, pkt.dest);
+                if (conn_idx >= 0 && conexiones[conn_idx].estado == CONECTADO)
+                {
+                    printf("Enviando archivo de %s a %s\n", pkt.username, pkt.dest);
+                    enviar_paquete(clients[idx].sockfd, &pkt);
+                }
+                else
+                {
+                    printf("Archivo descartado (%s -> %s) por estado no válido\n",
+                           pkt.username, pkt.dest);
+                }
+            }
+            break;
+        }
+
+        case FIN:
+        {
+            printf("Cliente %s pidió FIN\n", pkt.username);
+            close(sd);
+            clients[client_idx].sockfd = 0;
+            eliminar_conexiones_de_usuario(pkt.username);
+            pthread_exit(NULL);
+        }
         }
     }
 
     return NULL;
 }
-
 
 void nueva_conexion(int escuchandofd)
 {
@@ -305,7 +372,7 @@ void nueva_conexion(int escuchandofd)
             clients[i].acuerdod = 0;
             clients[i].username[0] = '\0';
 
-            thread_args_t* args = malloc(sizeof(thread_args_t));
+            thread_args_t *args = malloc(sizeof(thread_args_t));
             args->client_idx = i;
 
             pthread_t hilo;
