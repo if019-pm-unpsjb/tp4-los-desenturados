@@ -21,7 +21,7 @@ NEGRITA = '\033[1m'
 RESET = '\033[0m'
 
 SERVIDOR = "127.0.0.1"
-PUERTO = 28008
+PUERTO = 28009
 USUARIO = input(f"{NEGRITA}Usuario:{RESET} ").strip().encode('utf-8')[:32]
 
 usuarios_conectados = set()  
