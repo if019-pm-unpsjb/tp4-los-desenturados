@@ -21,7 +21,8 @@ enum
     FILE_CODE = 3,
     FIN = 4,
     ACEPTADO = 5,
-    RECHAZADO = 6
+    RECHAZADO = 6,
+    ERROR = 7
 };
 
 typedef enum
@@ -184,23 +185,35 @@ void *manejar_cliente(void *args)
         // Manejo de handshake inicial
         if (clients[client_idx].acuerdod == 0)
         {
-            if (pkt.code == SYN)
-            {
-                printf("Recibido SYN de %s\n", pkt.username);
-                strncpy(clients[client_idx].username, pkt.username, MAX_NAME_LEN);
-                packet_t synack = {.code = SYN};
-                strncpy(synack.username, "server", MAX_NAME_LEN);
-                strncpy(synack.dest, pkt.username, MAX_NAME_LEN);
-                synack.datalen = 0;
-                enviar_paquete(sd, &synack);
+            int idx = encontrar_cliente_por_nombre(pkt.dest);
+
+            if (encontrar_cliente_por_nombre(pkt.username)<0){
+                if (pkt.code == SYN)
+                {
+                    printf("Recibido SYN de %s\n", pkt.username);
+                    strncpy(clients[client_idx].username, pkt.username, MAX_NAME_LEN);
+                    packet_t synack = {.code = SYN};
+                    strncpy(synack.username, "server", MAX_NAME_LEN);
+                    strncpy(synack.dest, pkt.username, MAX_NAME_LEN);
+                    synack.datalen = 0;
+                    enviar_paquete(sd, &synack);
+                }
+                else if (pkt.code == ACK)
+                {
+                    clients[client_idx].acuerdod = 1;
+                    printf("Cliente %s completó acuerdo\n", clients[client_idx].username);
+                }
+                continue;
             }
-            else if (pkt.code == ACK)
-            {
-                clients[client_idx].acuerdod = 1;
-                printf("Cliente %s completó acuerdo\n", clients[client_idx].username);
+            else{
+                packet_t error_pkt = {.code = ERROR};
+                strncpy(error_pkt.username, "server", MAX_NAME_LEN);
+                strncpy(error_pkt.dest, pkt.username, MAX_NAME_LEN);
+                const char* msg = "El nombre de usuario ya está en uso.";
+                error_pkt.datalen = snprintf(error_pkt.data, sizeof(error_pkt.data), "%s", msg);
+                enviar_paquete(sd, &error_pkt);
+                }
             }
-            continue;
-        }
         printf("[DEBUG] ANTES SWITCH Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
 
         // Procesar paquetes
@@ -247,6 +260,13 @@ void *manejar_cliente(void *args)
                         printf("Mensaje descartado (%s -> %s) por estado PENDIENTE\n", pkt.username, pkt.dest);
                     }
                 }
+            }else{
+                printf("[DEBUG] FFFAALLLEEEs Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
+                packet_t error_pkt = {.code = ERROR};
+                strncpy(error_pkt.username, "server", MAX_NAME_LEN);
+                strncpy(error_pkt.dest, pkt.username, MAX_NAME_LEN);
+                error_pkt.datalen = snprintf(error_pkt.data, sizeof(error_pkt.data), "El usuario %s no esta en linea", pkt.dest);
+                enviar_paquete(sd, &error_pkt);
             }
             break;
         }
@@ -279,8 +299,7 @@ void *manejar_cliente(void *args)
                         packet_t confirm = {.code = ACEPTADO};
                         strncpy(confirm.username, pkt.username, MAX_NAME_LEN);
                         strncpy(confirm.dest, otro_usuario, MAX_NAME_LEN);
-                        confirm.datalen = snprintf(confirm.data, sizeof(confirm.data),
-                                                   "Conexión aceptada por %s", pkt.username);
+                        confirm.datalen = snprintf(confirm.data, sizeof(confirm.data), "Conexión aceptada por %s", pkt.username);
                         enviar_paquete(clients[idx_otro].sockfd, &confirm);
                     }
 
