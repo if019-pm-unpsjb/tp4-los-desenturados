@@ -13,17 +13,14 @@ CODIGO_FIN = 4
 CODIGO_ACEPTADO = 5
 CODIGO_RECHAZADO = 6
 CODIGO_ERROR = 7
+
 # Conexión
-SERVIDOR = "192.168.40.96"
+SERVIDOR = "192.168.0.106"
 PUERTO = 28008
-
-listbox_conexiones = None  # Inicialización
-
-
 
 # Cliente TCP
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+areas_chat = {}  # clave: nombre del contacto, valor: widget ScrolledText
 usuarios_conectados = set()
 USUARIO = None
 
@@ -47,37 +44,58 @@ def actualizar_lista_conexiones():
     for usuario in sorted(usuarios_conectados):
         listbox_conexiones.insert(tk.END, usuario)
 
+def mostrar_chat_para(contacto):
+    for area in areas_chat.values():
+        area.pack_forget()
+    if contacto not in areas_chat:
+        area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
+        area_nueva.pack()
+        area_nueva.config(state=tk.DISABLED)
+        areas_chat[contacto] = area_nueva
+    else:
+        areas_chat[contacto].pack()
+
 def escuchar():
     while True:
         datos = recv_exact(cliente, 4168)
         if datos is None:
-            chat_area.insert(tk.END, "[!] Desconectado del servidor.\n")
+            for area in areas_chat.values():
+                area.config(state=tk.NORMAL)
+                area.insert(tk.END, "[!] Desconectado del servidor.\n")
+                area.config(state=tk.DISABLED)
             break
+
         codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
         emisor = usuario_emisor.decode('utf-8').strip('\x00')
-        mensaje = contenido[:longitud_datos].decode(errors="ignore").rstrip()
-        
+        mensaje = contenido[:longitud_datos].split(b'\x00')[0].decode('utf-8', errors="ignore").strip()
+
+
         if codigo == CODIGO_MENSAJE:
-            chat_area.config(state=tk.NORMAL)
-            if emisor in usuarios_conectados:
-                chat_area.insert(tk.END, f"[{emisor}] {mensaje}\n")
-            else:
-                chat_area.insert(tk.END, f"[Solicitud] Conexión de '{emisor}'. Escribí /aceptar {emisor} o /rechazar {emisor}\n")
-            chat_area.config(state=tk.DISABLED)
-            chat_area.yview(tk.END)
+            if emisor not in areas_chat:
+                area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
+                area_nueva.pack_forget()
+                area_nueva.config(state=tk.DISABLED)
+                areas_chat[emisor] = area_nueva
+
+            area = areas_chat[emisor]
+            area.config(state=tk.NORMAL)
+            area.insert(tk.END, f"[{emisor}] {mensaje}\n")
+            area.config(state=tk.DISABLED)
+
         elif codigo == CODIGO_ACEPTADO:
             usuarios_conectados.add(emisor)
             actualizar_lista_conexiones()
-            chat_area.insert(tk.END, f"[+] Conexión aceptada con '{emisor}'. Ya podés chatear.\n")
+
+            if emisor not in areas_chat:
+                area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
+                area_nueva.pack_forget()
+                area_nueva.config(state=tk.DISABLED)
+                areas_chat[emisor] = area_nueva
+
         elif codigo == CODIGO_RECHAZADO:
-            chat_area.insert(tk.END, f"[-] {emisor} rechazó la conexión.\n")
-        elif codigo == CODIGO_ERROR:  # CODIGO_ERROR
-            chat_area.config(state=tk.NORMAL)
-            chat_area.insert(tk.END, f"[ERROR] {mensaje}\n")
-            chat_area.config(state=tk.DISABLED)
-            chat_area.see(tk.END)
-            messagebox.showerror("Error", mensaje)        
-            
+            messagebox.showinfo("Conexión rechazada", f"{emisor} rechazó la conexión.")
+        elif codigo == CODIGO_ERROR:
+            messagebox.showerror("Error", mensaje)
 
 def enviar():
     destino = destino_entry.get().strip()
@@ -92,20 +110,28 @@ def enviar():
         cliente.sendall(paquete)
         usuarios_conectados.add(usuario_a_aceptar)
         actualizar_lista_conexiones()
-        chat_area.insert(tk.END, f"[+] Aceptaste la conexión con {usuario_a_aceptar}\n")
-        cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), usuario_a_aceptar.encode(), b""))
+        return
+
     elif mensaje.startswith("/rechazar "):
         usuario_a_rechazar = mensaje.split()[1].strip()
         paquete = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO.encode(), destino=usuario_a_rechazar.encode())
         cliente.sendall(paquete)
-        chat_area.insert(tk.END, f"[-] Rechazaste la conexión con {usuario_a_rechazar}\n")
-    else:
-        paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO.encode(), destino=destino.encode(), datos=mensaje.encode())
-        cliente.sendall(paquete)
-        chat_area.config(state=tk.NORMAL)
-        chat_area.insert(tk.END, f"[Yo → {destino}] {mensaje}\n")
-        chat_area.config(state=tk.DISABLED)
-        chat_area.yview(tk.END)
+        return
+
+    # Mensaje normal
+    paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO.encode(), destino=destino.encode(), datos=mensaje.encode())
+    cliente.sendall(paquete)
+
+    if destino not in areas_chat:
+        area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
+        area_nueva.pack_forget()
+        area_nueva.config(state=tk.DISABLED)
+        areas_chat[destino] = area_nueva
+
+    area = areas_chat[destino]
+    area.config(state=tk.NORMAL)
+    area.insert(tk.END, f"[Yo → {destino}] {mensaje}\n")
+    area.config(state=tk.DISABLED)
 
     mensaje_entry.delete(0, tk.END)
 
@@ -114,33 +140,31 @@ def conectar():
     USUARIO = simpledialog.askstring("Usuario", "Ingresá tu nombre de usuario:")
     if not USUARIO:
         exit()
+
     try:
         cliente.connect((SERVIDOR, PUERTO))
     except:
         messagebox.showerror("Error", "No se pudo conectar al servidor.")
         exit()
+
     global label_usuario_logeado
     label_usuario_logeado.config(text=f"Usuario logueado: {USUARIO}")
-    # Handshake
+
     cliente.sendall(construir_paquete(CODIGO_SYN, usuario=USUARIO.encode()))
     respuesta = recv_exact(cliente, 4168)
     if not respuesta:
         messagebox.showerror("Error", "Servidor no responde.")
         exit()
+
     codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", respuesta)
     mensaje = contenido[:longitud_datos].decode(errors="ignore").rstrip()
-            
+
     if codigo == CODIGO_SYN:
         cliente.sendall(construir_paquete(CODIGO_ACK, usuario=USUARIO.encode()))
-    if codigo == CODIGO_ERROR:  # CODIGO_ERROR
-        chat_area.config(state=tk.NORMAL)
-        chat_area.insert(tk.END, f"[ERROR] {mensaje}\n")
-        chat_area.config(state=tk.DISABLED)
-        chat_area.see(tk.END)
+    if codigo == CODIGO_ERROR:
         messagebox.showerror("Error", mensaje)
         ventana.destroy()
         exit()
-        return
     threading.Thread(target=escuchar, daemon=True).start()
 
 # GUI
@@ -150,26 +174,22 @@ ventana.title("Chat MAILU")
 frame_principal = tk.Frame(ventana)
 frame_principal.pack(padx=10, pady=10)
 
-# Panel izquierdo: conexiones aceptadas
+# Izquierda: conexiones aceptadas
 frame_izquierda = tk.Frame(frame_principal)
 frame_izquierda.pack(side=tk.LEFT, padx=(0, 10), fill=tk.Y)
 
 tk.Label(frame_izquierda, text="Conexiones aceptadas").pack()
 listbox_conexiones = tk.Listbox(frame_izquierda, width=25)
 listbox_conexiones.pack(fill=tk.BOTH, expand=True)
-label_usuario_logeado = None  # antes del mainloop
-# Panel derecho: chat
+listbox_conexiones.bind("<<ListboxSelect>>", lambda e: mostrar_chat_para(listbox_conexiones.get(tk.ACTIVE)))
+
+# Derecha: chat
 frame_derecha = tk.Frame(frame_principal)
 frame_derecha.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 label_usuario_logeado = tk.Label(frame_derecha, text="Usuario logueado: ", font=("Arial", 10, "bold"))
 label_usuario_logeado.pack(anchor='w', padx=5, pady=(0,5))
 
-
-chat_area = scrolledtext.ScrolledText(frame_derecha, width=60, height=20)
-chat_area.pack()
-chat_area.config(state=tk.DISABLED)
-
-
+# Abajo: input y botones
 frame_abajo = tk.Frame(ventana)
 frame_abajo.pack(padx=10, pady=5)
 
