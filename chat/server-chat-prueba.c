@@ -12,6 +12,8 @@
 #define MAX_CONEXIONES 100
 #define PORT 28008
 #define MAX_CLIENTS 10
+#define MAX_MENSAJES 100
+#define MAX_MSG_LEN 512
 
 enum
 {
@@ -62,6 +64,16 @@ typedef struct
     packet_t pkt;
 } thread_args_t; */
 
+typedef struct {
+    char usuario1[MAX_NAME_LEN];
+    char usuario2[MAX_NAME_LEN];
+    char mensajes[MAX_MENSAJES][MAX_MSG_LEN];
+    int cantidad;
+} Historial;
+
+Historial historiales[MAX_CONEXIONES];
+int num_historiales = 0;
+
 typedef struct
 {
     int client_idx;
@@ -106,27 +118,61 @@ int buscar_conexion(const char *u1, const char *u2)
     return -1;
 }
 
-void eliminar_conexiones_de_usuario(const char *username)
-{
-    for (int i = 0; i < num_conexiones; i++)
-    {
-        if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username))
-        {
-            printf("Eliminando conexi贸n entre %s y %s\n", conexiones[i].usuario1, conexiones[i].usuario2);
-            for (int k = i; k < num_conexiones - 1; k++)
+void eliminar_conexiones_de_usuario(const char *username) {
+    for (int i = 0; i < num_conexiones; i++) {
+        if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username)) {
+            printf("Eliminando conexión entre %s y %s\n", conexiones[i].usuario1, conexiones[i].usuario2);
+
+            // Eliminar historial asociado
+            for (int j = 0; j < num_historiales; j++) {
+                if (!strcmp(historiales[j].usuario1, username) || !strcmp(historiales[j].usuario2, username)) {
+                    for (int k = j; k < num_historiales - 1; k++) {
+                        historiales[k] = historiales[k + 1];
+                    }
+                    num_historiales--;
+                    j--;
+                }
+            }
+
+            // Eliminar conexión
+            for (int k = i; k < num_conexiones - 1; k++) {
                 conexiones[k] = conexiones[k + 1];
+            }
             num_conexiones--;
             i--;
         }
     }
 }
 
+
 void enviar_paquete(int sockfd, packet_t *pkt)
 {
     write(sockfd, pkt, sizeof(*pkt));
 }
 
-/* void* manejar_cliente(void* args); */
+int obtener_o_crear_historial(const char* u1, const char* u2) {
+    for (int i = 0; i < num_historiales; i++) {
+        if ((strcmp(historiales[i].usuario1, u1) == 0 && strcmp(historiales[i].usuario2, u2) == 0) ||
+            (strcmp(historiales[i].usuario1, u2) == 0 && strcmp(historiales[i].usuario2, u1) == 0)) {
+            return i;
+        }
+    }
+    if (num_historiales >= MAX_CONEXIONES) return -1;
+    strncpy(historiales[num_historiales].usuario1, u1, MAX_NAME_LEN);
+    strncpy(historiales[num_historiales].usuario2, u2, MAX_NAME_LEN);
+    historiales[num_historiales].cantidad = 0;
+    return num_historiales++;
+}
+
+
+void guardar_mensaje_historial(const char* u1, const char* u2, const char* mensaje) {
+    int idx = obtener_o_crear_historial(u1, u2);
+    if (idx < 0 || historiales[idx].cantidad >= MAX_MENSAJES) return;
+
+    snprintf(historiales[idx].mensajes[historiales[idx].cantidad], MAX_MSG_LEN, "%s: %s", u1, mensaje);
+    historiales[idx].cantidad++;
+}
+
 
 void imprimir_estado_conexiones()
 {
@@ -231,6 +277,8 @@ void *manejar_cliente(void *args)
                     agregar_conexion(pkt.username, pkt.dest, PENDIENTE);
                     printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
                     enviar_paquete(clients[idx].sockfd, &pkt);
+                    guardar_mensaje_historial(pkt.username, pkt.dest, pkt.data);
+
                 }
                 else
                 {
