@@ -2,7 +2,8 @@ import socket
 import threading
 import struct
 import tkinter as tk
-from tkinter import simpledialog, messagebox, scrolledtext
+from tkinter import simpledialog, messagebox, scrolledtext, filedialog
+import os
 
 # Códigos
 CODIGO_SYN = 0
@@ -24,11 +25,15 @@ usuarios_pendientes = set()
 usuarios_pendientes_entrantes = set()
 USUARIO = None
 
+
 def construir_paquete(codigo, usuario=b"", destino=b"", datos=b""):
+    datos = datos[:4096]
+    longitud = len(datos)
+    datos = datos + b'\x00' * (4096 - longitud)
     usuario = usuario.ljust(32, b'\x00')[:32]
     destino = destino.ljust(32, b'\x00')[:32]
-    datos = datos + b'\x00' * (4096 - len(datos)) if len(datos) < 4096 else datos[:4096]
-    return struct.pack("i32s32si4096s", codigo, usuario, destino, len(datos), datos)
+    return struct.pack("i32s32si4096s", codigo, usuario, destino, longitud, datos)
+
 
 def recv_exact(sock, size):
     buffer = b''
@@ -38,6 +43,7 @@ def recv_exact(sock, size):
             return None
         buffer += parte
     return buffer
+
 
 def actualizar_listas():
     listbox_conexiones.delete(0, tk.END)
@@ -62,6 +68,7 @@ def actualizar_listas():
             lbl_pendiente = tk.Label(fila, text="(pendiente)", fg="gray")
             lbl_pendiente.pack(side=tk.LEFT, padx=4)
 
+
 def mostrar_chat_para(contacto):
     for area in areas_chat.values():
         area.pack_forget()
@@ -72,6 +79,7 @@ def mostrar_chat_para(contacto):
         areas_chat[contacto] = area_nueva
     else:
         areas_chat[contacto].pack()
+
 
 def aceptar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_ACEPTADO, USUARIO.encode(), usuario.encode()))
@@ -84,10 +92,12 @@ def aceptar_usuario(usuario):
         area_nueva.config(state=tk.DISABLED)
         areas_chat[usuario] = area_nueva
 
+
 def rechazar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_RECHAZADO, USUARIO.encode(), usuario.encode()))
     usuarios_pendientes.discard(usuario)
     actualizar_listas()
+
 
 def agregar_conexion():
     destino = simpledialog.askstring("Nueva conexión", "Nombre de usuario a contactar:")
@@ -97,6 +107,37 @@ def agregar_conexion():
     usuarios_pendientes.add(destino)
     actualizar_listas()
 
+
+def enviar_archivo():
+    contacto = listbox_conexiones.get(tk.ACTIVE)
+    if not contacto:
+        return
+
+    filepath = filedialog.askopenfilename()
+    if not filepath:
+        return
+
+    area = areas_chat.get(contacto)
+    if not area:
+        return
+
+    with open(filepath, "rb") as f:
+        block_num = 1
+        while True:
+            bloque = f.read(4096)
+            if not bloque:
+                break
+            paquete = construir_paquete(CODIGO_FILE, USUARIO.encode(), contacto.encode(), bloque)
+            cliente.sendall(paquete)
+
+            area.config(state=tk.NORMAL)
+            area.insert(tk.END, f"[Archivo] Enviando bloque {block_num} de tamaño {len(bloque)} bytes\n")
+            area.tag_add("der", "end-2l", "end-1l")
+            area.tag_config("der", justify="right")
+            area.config(state=tk.DISABLED)
+            block_num += 1
+
+
 def escuchar():
     while True:
         datos = recv_exact(cliente, 4168)
@@ -105,19 +146,22 @@ def escuchar():
 
         codigo, usuario_emisor, usuario_destino, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos)
         emisor = usuario_emisor.decode('utf-8').strip('\x00')
-        mensaje = contenido[:longitud_datos].split(b'\x00')[0].decode('utf-8', errors="ignore").strip()
+        raw = contenido[:longitud_datos]
+        mensaje = raw.decode('utf-8', errors="ignore").strip() if longitud_datos > 0 else ""
+
+        if emisor not in areas_chat:
+            area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
+            area_nueva.pack_forget()
+            area_nueva.config(state=tk.DISABLED)
+            areas_chat[emisor] = area_nueva
+
+        area = areas_chat[emisor]
 
         if codigo == CODIGO_MENSAJE:
             if emisor not in usuarios_conectados:
                 usuarios_pendientes.add(emisor)
                 usuarios_pendientes_entrantes.add(emisor)
                 actualizar_listas()
-            if emisor not in areas_chat:
-                area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
-                area_nueva.pack_forget()
-                area_nueva.config(state=tk.DISABLED)
-                areas_chat[emisor] = area_nueva
-            area = areas_chat[emisor]
             area.config(state=tk.NORMAL)
             area.insert(tk.END, f"{emisor}: {mensaje}\n")
             area.tag_add("izq", "end-2l", "end-1l")
@@ -128,20 +172,27 @@ def escuchar():
             usuarios_conectados.add(emisor)
             usuarios_pendientes.discard(emisor)
             actualizar_listas()
-            if emisor not in areas_chat:
-                area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
-                area_nueva.pack_forget()
-                area_nueva.config(state=tk.DISABLED)
-                areas_chat[emisor] = area_nueva
 
         elif codigo == CODIGO_RECHAZADO:
             usuarios_pendientes.discard(emisor)
             actualizar_listas()
+
+        elif codigo == CODIGO_FILE:
+            filename = f"archivo_de_{emisor}.bin"
+            with open(filename, "ab") as f:
+                f.write(contenido[:longitud_datos])
+            area.config(state=tk.NORMAL)
+            area.insert(tk.END, f"[Archivo] Recibido bloque de {longitud_datos} bytes de {emisor}\n")
+            area.tag_add("izq", "end-2l", "end-1l")
+            area.tag_config("izq", justify="left")
+            area.config(state=tk.DISABLED)
+
         elif codigo == CODIGO_ERROR:
             ultimo = list(usuarios_pendientes)[-1]
             usuarios_pendientes.discard(ultimo)
             actualizar_listas()
             messagebox.showerror("Error", mensaje)
+
 
 def enviar():
     contacto = listbox_conexiones.get(tk.ACTIVE)
@@ -164,6 +215,7 @@ def enviar():
     area.tag_config("der", justify="right")
     area.config(state=tk.DISABLED)
     mensaje_entry.delete(0, tk.END)
+
 
 def conectar():
     global USUARIO
@@ -239,6 +291,8 @@ mensaje_entry = tk.Entry(frame_abajo, width=60)
 mensaje_entry.grid(row=0, column=0, padx=5)
 boton_enviar = tk.Button(frame_abajo, text="Enviar", command=enviar)
 boton_enviar.grid(row=0, column=1)
+boton_archivo = tk.Button(frame_abajo, text="Archivo", command=enviar_archivo)
+boton_archivo.grid(row=0, column=2, padx=5)
 
 conectar()
 ventana.mainloop()
