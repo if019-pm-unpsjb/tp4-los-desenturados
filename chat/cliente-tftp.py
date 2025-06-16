@@ -60,7 +60,6 @@ if not response_received:
     sock.close()
     exit(1)
 
-# --- MANEJO DE PAQUETE DE ERROR TFTP ---
 if len(data) >= 4 and data[1] == 5:
     error_code = data[3]
     error_msg = data[4:-1].decode(errors="replace")

@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <sys/time.h> // Para struct timeval
-
+#include <sys/time.h>
 
 #define PORT 6969
 #define MAX_RETRIES 5
@@ -51,12 +50,27 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
     unsigned char buffer[1024];
     printf("Atendiendo cliente PID=%d, archivo=%s, modo=%s, opcode=%d\n", getpid(), filename, mode, opcode);
+    if (strcasecmp(mode, "octet") != 0)
+    {
+        send_tftp_error(sockfd, &cliaddr, len, 0, "Modo no soportado");
+        close(sockfd);
+        exit(1);
+    }
 
     if (opcode == 2)
     { // WRQ
         unsigned char ack[4] = {0, 4, 0, 0};
         sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
         printf("ACK enviado al cliente (block 0)\n");
+
+        FILE *check = fopen(filename, "rb");
+        if (check != NULL)
+        {
+            fclose(check);
+            send_tftp_error(sockfd, &cliaddr, len, 6, "Archivo ya existe");
+            close(sockfd);
+            exit(1);
+        }
 
         FILE *f = fopen(filename, "wb");
         if (!f)
