@@ -213,7 +213,6 @@ void *manejar_cliente(void *args)
     int client_idx = targs->client_idx;
     free(targs);
 
-    printf("[DEBUG] ENTRE AL MANEJAR CLIENTE");
     int sd = clients[client_idx].sockfd;
     packet_t pkt;
     while (1)
@@ -227,7 +226,6 @@ void *manejar_cliente(void *args)
             eliminar_conexiones_de_usuario(clients[client_idx].username);
             break;
         }
-        printf("[DEBUG] INICIAL Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
         // Manejo de handshake inicial
         if (clients[client_idx].acuerdod == 0)
         {
@@ -260,7 +258,6 @@ void *manejar_cliente(void *args)
                 enviar_paquete(sd, &error_pkt);
                 }
             }
-        printf("[DEBUG] ANTES SWITCH Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
 
         // Procesar paquetes
         switch (pkt.code)
@@ -309,7 +306,6 @@ void *manejar_cliente(void *args)
                     }
                 }
             }else{
-                printf("[DEBUG] FFFAALLLEEEs Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
                 packet_t error_pkt = {.code = ERROR};
                 strncpy(error_pkt.username, "server", MAX_NAME_LEN);
                 strncpy(error_pkt.dest, pkt.username, MAX_NAME_LEN);
@@ -321,7 +317,6 @@ void *manejar_cliente(void *args)
 
         case ACEPTADO:
         {
-            printf("Recibido paquete ACEPTADO\n");
 
             int conn_idx = buscar_conexion(pkt.username, pkt.dest);
             if (conn_idx >= 0)
@@ -445,8 +440,6 @@ void nueva_conexion(int escuchandofd)
             pthread_t hilo;
             pthread_create(&hilo, NULL, manejar_cliente, args);
             pthread_detach(hilo);
-            printf("[DEBUG] HILO CREADO PARA CLIENTE %d\n", i);
-            printf("Nuevo cliente conectado y manejado por hilo.\n");
             break;
         }
     }
