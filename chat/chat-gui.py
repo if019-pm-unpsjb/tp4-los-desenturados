@@ -16,16 +16,18 @@ CODIGO_RECHAZADO = 6
 CODIGO_ERROR = 7
 
 
+listbox_conexiones = None  # Inicialización
+
+# Cliente TCP
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-areas_chat = {}  # contacto -> ScrolledText
+areas_chat = {}  
 # Conexión
-SERVIDOR = "192.168.0.109"
+SERVIDOR = "127.0.0.1"
 PUERTO = 28008
 
 listbox_conexiones = None  # Inicialización
 
 # Cliente TCP
-cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 usuarios_conectados = set()
 usuarios_pendientes = set()
 usuarios_pendientes_entrantes = set()
@@ -173,7 +175,6 @@ def enviar_archivo():
     area.tag_config("der", justify="right")
     area.config(state=tk.DISABLED)
 
-
 def escuchar():
     while True:
         datos = recv_exact(cliente, 4168)
@@ -238,11 +239,30 @@ def escuchar():
 
 
         elif codigo == CODIGO_ERROR:
-            ultimo = list(usuarios_pendientes)[-1]
-            usuarios_pendientes.discard(ultimo)
-            actualizar_listas()
-            messagebox.showerror("Error", mensaje)
+            if mensaje.startswith("El usuario ") and "se ha desconectado" in mensaje:
+                usuario_desconectado = mensaje.split(" ")[2]
 
+                if usuario_desconectado in usuarios_conectados:
+                    usuarios_conectados.discard(usuario_desconectado)
+
+                if usuario_desconectado in areas_chat:
+                    area = areas_chat[usuario_desconectado]
+                    area.config(state=tk.NORMAL)
+                    area.insert(tk.END, f"[✗] El usuario '{usuario_desconectado}' se ha desconectado.\n")
+                    area.config(state=tk.DISABLED)
+
+                actualizar_listas()
+                messagebox.showinfo("Desconexión", f"{usuario_desconectado} se ha desconectado. Ya no podés enviarle mensajes.")
+            
+            if mensaje.startswith("El usuario ") and "no esta en linea" in mensaje:
+                ultimo_usuario= list(usuarios_pendientes)[-1]
+                usuarios_pendientes.discard(ultimo_usuario)
+                actualizar_listas()
+                messagebox.showerror("Error", mensaje)
+            
+            else:
+                # Asumimos que es un error por nombre en uso u otro
+                messagebox.showerror("Error", mensaje)
 
 
 def enviar():
@@ -250,7 +270,9 @@ def enviar():
     mensaje = mensaje_entry.get().strip()
     if not contacto or not mensaje:
         return
-
+    if contacto not in usuarios_conectados:
+        messagebox.showwarning("Contacto no disponible", f"No podés enviar mensajes a '{contacto}' porque ya no está conectado.")
+        return
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), contacto.encode(), mensaje.encode()))
 
     actualizar_listas()
@@ -360,11 +382,6 @@ canvas.create_window((0, 0), window=frame_pendientes_usuarios, anchor="nw")
 canvas.configure(yscrollcommand=scrollbar.set)
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
-
-frame_derecha = tk.Frame(frame_principal)
-frame_derecha.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-label_usuario_logeado = tk.Label(frame_derecha, text="Usuario logueado: ", font=("Arial", 10, "bold"))
-label_usuario_logeado.pack(anchor='w', padx=5, pady=(0, 5))
 
 frame_abajo = tk.Frame(ventana)
 frame_abajo.pack(padx=10, pady=5)
