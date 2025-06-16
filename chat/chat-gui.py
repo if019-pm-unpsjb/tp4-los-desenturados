@@ -120,6 +120,8 @@ def agregar_conexion():
     actualizar_listas()
 
 
+from pathlib import Path
+
 def enviar_archivo():
     contacto = listbox_conexiones.get(tk.ACTIVE)
     if not contacto:
@@ -133,6 +135,23 @@ def enviar_archivo():
     if not area:
         return
 
+    # Obtener solo el nombre (sin ruta)
+    nombre_archivo = Path(filepath).name
+    nombre_bytes = nombre_archivo.encode("utf-8")
+
+    # Enviar primer paquete con el nombre del archivo
+    paquete_nombre = construir_paquete(
+        CODIGO_FILE,
+        usuario=USUARIO.encode(),
+        destino=contacto.encode(),
+        datos=nombre_bytes
+    )
+    cliente.sendall(paquete_nombre)
+
+    area.config(state=tk.NORMAL)
+    area.insert(tk.END, f"[Archivo] Enviando archivo: {nombre_archivo}\n")
+
+    # Ahora enviar los bloques binarios del archivo
     with open(filepath, "rb") as f:
         block_num = 1
         while True:
@@ -142,35 +161,17 @@ def enviar_archivo():
             paquete = construir_paquete(CODIGO_FILE, USUARIO.encode(), contacto.encode(), bloque)
             cliente.sendall(paquete)
 
-            area.config(state=tk.NORMAL)
-            area.insert(tk.END, f"[Archivo] Enviando bloque {block_num} de tamaño {len(bloque)} bytes\n")
-            area.tag_add("der", "end-2l", "end-1l")
+            area.insert(tk.END, f"[Archivo] Enviado bloque {block_num} ({len(bloque)} bytes)\n")
             area.tag_config("der", justify="right")
+            area.tag_add("der", "end-2l", "end-1l")
             area.config(state=tk.DISABLED)
             block_num += 1
 
-
-def aceptar_usuario(usuario):
-    paquete = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO.encode(), destino=usuario.encode())
-    cliente.sendall(paquete)
-    usuarios_conectados.add(usuario)
-    usuarios_pendientes.discard(usuario)
-    actualizar_listas()
-    chat_area.config(state=tk.NORMAL)
-    chat_area.insert(tk.END, f"[+] Aceptaste la conexión con {usuario}\n")
-    chat_area.config(state=tk.DISABLED)
-    chat_area.yview(tk.END)
-
-def rechazar_usuario(usuario):
-    paquete = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO.encode(), destino=usuario.encode())
-    cliente.sendall(paquete)
-    usuarios_pendientes.discard(usuario)
-    actualizar_listas()
-    chat_area.config(state=tk.NORMAL)
-    chat_area.insert(tk.END, f"[-] Rechazaste la conexión con {usuario}\n")
-    chat_area.config(state=tk.DISABLED)
-    chat_area.yview(tk.END)
-
+    area.config(state=tk.NORMAL)
+    area.insert(tk.END, f"[✓] Archivo '{nombre_archivo}' enviado completo\n")
+    area.tag_add("der", "end-2l", "end-1l")
+    area.tag_config("der", justify="right")
+    area.config(state=tk.DISABLED)
 
 
 def escuchar():
@@ -204,7 +205,6 @@ def escuchar():
             area.config(state=tk.DISABLED)
 
         elif codigo == CODIGO_ACEPTADO:
-            chat_area.config(state=tk.NORMAL)
             usuarios_conectados.add(emisor)
             usuarios_pendientes.discard(emisor)
             actualizar_listas()
@@ -212,16 +212,30 @@ def escuchar():
         elif codigo == CODIGO_RECHAZADO:
             usuarios_pendientes.discard(emisor)
             actualizar_listas()
-
+            
         elif codigo == CODIGO_FILE:
-            filename = f"archivo_de_{emisor}.bin"
-            with open(filename, "ab") as f:
-                f.write(contenido[:longitud_datos])
+            # Primer mensaje: nombre del archivo
+            nombre_archivo = contenido[:longitud_datos].decode(errors="replace")
+            archivo_recibido = f"archivo_de_{emisor}_{nombre_archivo}"
             area.config(state=tk.NORMAL)
-            area.insert(tk.END, f"[Archivo] Recibido bloque de {longitud_datos} bytes de {emisor}\n")
+            area.insert(tk.END, f"[Archivo] Recibiendo archivo '{nombre_archivo}' de {emisor}\n")
+            with open(archivo_recibido, "wb") as f:
+                while True:
+                    datos_archivo = recv_exact(cliente, 4168)
+                    if datos_archivo is None:
+                        messagebox.showerror("Error de conexión", "Conexión cerrada inesperadamente")
+                        area.insert(tk.END, "[✗] Error: conexión cerrada inesperadamente.\n")
+                        break
+                    _, _, _, longitud_datos, contenido = struct.unpack("i32s32si4096s", datos_archivo)
+                    f.write(contenido[:longitud_datos]) 
+                    area.insert(tk.END, f"[Archivo] Bloque de {longitud_datos} bytes recibido...\n")
+                    if longitud_datos < 4096:  # Último bloque
+                        area.insert(tk.END, f"[✓] Archivo recibido completo: {archivo_recibido}\n")
+                        break
             area.tag_add("izq", "end-2l", "end-1l")
             area.tag_config("izq", justify="left")
             area.config(state=tk.DISABLED)
+
 
         elif codigo == CODIGO_ERROR:
             ultimo = list(usuarios_pendientes)[-1]
@@ -238,31 +252,7 @@ def enviar():
         return
 
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), contacto.encode(), mensaje.encode()))
-    """ if mensaje.startswith("/aceptar "):
-        usuario_a_aceptar = mensaje.split()[1].strip()
-        paquete = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO.encode(), destino=usuario_a_aceptar.encode())
-        cliente.sendall(paquete)
-        usuarios_conectados.add(usuario_a_aceptar)
-        usuarios_pendientes.discard(usuario_a_aceptar)
-        actualizar_listas()
-        chat_area.insert(tk.END, f"[+] Aceptaste la conexión con {usuario_a_aceptar}\n")
-        cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), usuario_a_aceptar.encode(), b""))
-    elif mensaje.startswith("/rechazar "):
-        usuario_a_rechazar = mensaje.split()[1].strip()
-        paquete = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO.encode(), destino=usuario_a_rechazar.encode())
-        cliente.sendall(paquete)
-        usuarios_pendientes.discard(usuario_a_rechazar)
-        actualizar_listas() 
-        chat_area.insert(tk.END, f"[-] Rechazaste la conexión con {usuario_a_rechazar}\n")
-    else: """
-    paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO.encode(), destino=destino.encode(), datos=mensaje.encode())
-    cliente.sendall(paquete)
-    chat_area.config(state=tk.NORMAL)
-    chat_area.insert(tk.END, f"[Yo → {destino}] {mensaje}\n")
-    chat_area.config(state=tk.DISABLED)
-    chat_area.yview(tk.END)
-    if destino not in usuarios_conectados:
-        usuarios_pendientes.add(destino)
+
     actualizar_listas()
 
     if contacto not in areas_chat:
