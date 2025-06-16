@@ -15,11 +15,17 @@ CODIGO_ACEPTADO = 5
 CODIGO_RECHAZADO = 6
 CODIGO_ERROR = 7
 
-SERVIDOR = "192.168.0.106"
-PUERTO = 28008
 
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  # contacto -> ScrolledText
+# Conexión
+SERVIDOR = "192.168.0.109"
+PUERTO = 28008
+
+listbox_conexiones = None  # Inicialización
+
+# Cliente TCP
+cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 usuarios_conectados = set()
 usuarios_pendientes = set()
 usuarios_pendientes_entrantes = set()
@@ -46,22 +52,28 @@ def recv_exact(sock, size):
 
 
 def actualizar_listas():
+
     listbox_conexiones.delete(0, tk.END)
     for usuario in sorted(usuarios_conectados):
         listbox_conexiones.insert(tk.END, usuario)
 
+
+    # Limpiar frame pendientes
     for widget in frame_pendientes_usuarios.winfo_children():
         widget.destroy()
 
+    # Mostrar pendientes
     for usuario in sorted(usuarios_pendientes):
         fila = tk.Frame(frame_pendientes_usuarios)
         fila.pack(fill=tk.X, pady=1, padx=2)
+
         lbl = tk.Label(fila, text=usuario, width=12, anchor="w")
         lbl.pack(side=tk.LEFT)
 
         if usuario in usuarios_pendientes_entrantes:
             btn_aceptar = tk.Button(fila, text="✓", fg="green", width=2, command=lambda u=usuario: aceptar_usuario(u))
             btn_aceptar.pack(side=tk.LEFT, padx=2)
+
             btn_rechazar = tk.Button(fila, text="✗", fg="red", width=2, command=lambda u=usuario: rechazar_usuario(u))
             btn_rechazar.pack(side=tk.LEFT)
         else:
@@ -138,6 +150,29 @@ def enviar_archivo():
             block_num += 1
 
 
+def aceptar_usuario(usuario):
+    paquete = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO.encode(), destino=usuario.encode())
+    cliente.sendall(paquete)
+    usuarios_conectados.add(usuario)
+    usuarios_pendientes.discard(usuario)
+    actualizar_listas()
+    chat_area.config(state=tk.NORMAL)
+    chat_area.insert(tk.END, f"[+] Aceptaste la conexión con {usuario}\n")
+    chat_area.config(state=tk.DISABLED)
+    chat_area.yview(tk.END)
+
+def rechazar_usuario(usuario):
+    paquete = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO.encode(), destino=usuario.encode())
+    cliente.sendall(paquete)
+    usuarios_pendientes.discard(usuario)
+    actualizar_listas()
+    chat_area.config(state=tk.NORMAL)
+    chat_area.insert(tk.END, f"[-] Rechazaste la conexión con {usuario}\n")
+    chat_area.config(state=tk.DISABLED)
+    chat_area.yview(tk.END)
+
+
+
 def escuchar():
     while True:
         datos = recv_exact(cliente, 4168)
@@ -169,6 +204,7 @@ def escuchar():
             area.config(state=tk.DISABLED)
 
         elif codigo == CODIGO_ACEPTADO:
+            chat_area.config(state=tk.NORMAL)
             usuarios_conectados.add(emisor)
             usuarios_pendientes.discard(emisor)
             actualizar_listas()
@@ -194,6 +230,7 @@ def escuchar():
             messagebox.showerror("Error", mensaje)
 
 
+
 def enviar():
     contacto = listbox_conexiones.get(tk.ACTIVE)
     mensaje = mensaje_entry.get().strip()
@@ -201,6 +238,32 @@ def enviar():
         return
 
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), contacto.encode(), mensaje.encode()))
+    """ if mensaje.startswith("/aceptar "):
+        usuario_a_aceptar = mensaje.split()[1].strip()
+        paquete = construir_paquete(CODIGO_ACEPTADO, usuario=USUARIO.encode(), destino=usuario_a_aceptar.encode())
+        cliente.sendall(paquete)
+        usuarios_conectados.add(usuario_a_aceptar)
+        usuarios_pendientes.discard(usuario_a_aceptar)
+        actualizar_listas()
+        chat_area.insert(tk.END, f"[+] Aceptaste la conexión con {usuario_a_aceptar}\n")
+        cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), usuario_a_aceptar.encode(), b""))
+    elif mensaje.startswith("/rechazar "):
+        usuario_a_rechazar = mensaje.split()[1].strip()
+        paquete = construir_paquete(CODIGO_RECHAZADO, usuario=USUARIO.encode(), destino=usuario_a_rechazar.encode())
+        cliente.sendall(paquete)
+        usuarios_pendientes.discard(usuario_a_rechazar)
+        actualizar_listas() 
+        chat_area.insert(tk.END, f"[-] Rechazaste la conexión con {usuario_a_rechazar}\n")
+    else: """
+    paquete = construir_paquete(CODIGO_MENSAJE, usuario=USUARIO.encode(), destino=destino.encode(), datos=mensaje.encode())
+    cliente.sendall(paquete)
+    chat_area.config(state=tk.NORMAL)
+    chat_area.insert(tk.END, f"[Yo → {destino}] {mensaje}\n")
+    chat_area.config(state=tk.DISABLED)
+    chat_area.yview(tk.END)
+    if destino not in usuarios_conectados:
+        usuarios_pendientes.add(destino)
+    actualizar_listas()
 
     if contacto not in areas_chat:
         area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
@@ -262,6 +325,34 @@ tk.Label(frame_izquierda, text="Conexiones aceptadas").pack()
 listbox_conexiones = tk.Listbox(frame_izquierda, width=25)
 listbox_conexiones.pack(fill=tk.BOTH, expand=True)
 listbox_conexiones.bind("<<ListboxSelect>>", lambda e: mostrar_chat_para(listbox_conexiones.get(tk.ACTIVE)))
+label_usuario_logeado = None  # antes del mainloop
+
+# Subframe para conexiones pendientes
+frame_pendientes = tk.Frame(frame_izquierda)
+frame_pendientes.pack(fill=tk.BOTH, expand=True)
+tk.Label(frame_pendientes, text="Conexiones pendientes").pack()
+
+# Scrollable frame para los pendientes
+canvas = tk.Canvas(frame_pendientes, height=150)
+scrollbar = tk.Scrollbar(frame_pendientes, orient="vertical", command=canvas.yview)
+frame_pendientes_usuarios = tk.Frame(canvas)
+
+frame_pendientes_usuarios.bind(
+    "<Configure>",
+    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+)
+
+canvas.create_window((0, 0), window=frame_pendientes_usuarios, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+
+# Panel derecho: chat
+frame_derecha = tk.Frame(frame_principal)
+frame_derecha.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+label_usuario_logeado = tk.Label(frame_derecha, text="Usuario logueado: ", font=("Arial", 10, "bold"))
+label_usuario_logeado.pack(anchor='w', padx=5, pady=(0,5))
 
 frame_pendientes = tk.Frame(frame_izquierda)
 frame_pendientes.pack(fill=tk.BOTH, expand=True)
