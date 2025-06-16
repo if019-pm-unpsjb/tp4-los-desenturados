@@ -19,8 +19,8 @@ CODIGO_ERROR = 7
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  # contacto -> ScrolledText
 # Conexión
-SERVIDOR = "192.168.0.109"
-PUERTO = 28008
+SERVIDOR = "127.0.0.1"
+PUERTO = 28009
 
 listbox_conexiones = None  # Inicialización
 
