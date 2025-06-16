@@ -23,6 +23,7 @@ cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  
 # Conexión
 SERVIDOR = "127.0.0.1"
+
 PUERTO = 28008
 
 listbox_conexiones = None  # Inicialización
