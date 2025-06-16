@@ -117,13 +117,31 @@ int buscar_conexion(const char *u1, const char *u2)
     }
     return -1;
 }
+void enviar_paquete(int sockfd, packet_t *pkt)
+{
+    write(sockfd, pkt, sizeof(*pkt));
+}
 
 void eliminar_conexiones_de_usuario(const char *username) {
     for (int i = 0; i < num_conexiones; i++) {
         if (!strcmp(conexiones[i].usuario1, username) || !strcmp(conexiones[i].usuario2, username)) {
+            const char *otro_usuario = strcmp(conexiones[i].usuario1, username) == 0
+                                       ? conexiones[i].usuario2
+                                       : conexiones[i].usuario1;
+
             printf("Eliminando conexión entre %s y %s\n", conexiones[i].usuario1, conexiones[i].usuario2);
 
-            // Eliminar historial asociado
+            int idx_otro = encontrar_cliente_por_nombre(otro_usuario);
+            if (idx_otro >= 0) {
+                packet_t aviso = {.code = ERROR}; // O podés definir un nuevo código como DESCONECTADO
+                strncpy(aviso.username, "server", MAX_NAME_LEN);
+                strncpy(aviso.dest, otro_usuario, MAX_NAME_LEN);
+                aviso.datalen = snprintf(aviso.data, sizeof(aviso.data),
+                                         "El usuario %s se ha desconectado. La conexión fue cerrada.",
+                                         username);
+                enviar_paquete(clients[idx_otro].sockfd, &aviso);
+            }
+
             for (int j = 0; j < num_historiales; j++) {
                 if (!strcmp(historiales[j].usuario1, username) || !strcmp(historiales[j].usuario2, username)) {
                     for (int k = j; k < num_historiales - 1; k++) {
@@ -144,11 +162,6 @@ void eliminar_conexiones_de_usuario(const char *username) {
     }
 }
 
-
-void enviar_paquete(int sockfd, packet_t *pkt)
-{
-    write(sockfd, pkt, sizeof(*pkt));
-}
 
 int obtener_o_crear_historial(const char* u1, const char* u2) {
     for (int i = 0; i < num_historiales; i++) {
@@ -181,7 +194,6 @@ void imprimir_estado_conexiones()
     {
         if (strlen(conexiones[i].usuario1) == 0 && strlen(conexiones[i].usuario2) == 0)
         {
-            // Entrada vac铆a, ignorar
             continue;
         }
 
@@ -202,7 +214,6 @@ void imprimir_estado_conexiones()
         double minutos = difftime(ahora, conexiones[i].timestamp) / 60.0;
         printf("Conexión %d: '%s' <-> '%s' | Estado: %s | Tiempo: %.1f min\n",
                i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str, minutos);
-        // printf("Conexi贸n %d: '%s' <-> '%s' | Estado: %s\n", i, conexiones[i].usuario1, conexiones[i].usuario2, estado_str);
     }
     printf("===================================\n\n");
 }
@@ -213,6 +224,7 @@ void *manejar_cliente(void *args)
     int client_idx = targs->client_idx;
     free(targs);
 
+    printf("[DEBUG] ENTRE AL MANEJAR CLIENTE");
     int sd = clients[client_idx].sockfd;
     packet_t pkt;
     while (1)
@@ -226,6 +238,7 @@ void *manejar_cliente(void *args)
             eliminar_conexiones_de_usuario(clients[client_idx].username);
             break;
         }
+        printf("[DEBUG] INICIAL Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
         // Manejo de handshake inicial
         if (clients[client_idx].acuerdod == 0)
         {
@@ -275,7 +288,6 @@ void *manejar_cliente(void *args)
                     printf("Solicitud de conexión de %s a %s\n", pkt.username, pkt.dest);
                     enviar_paquete(clients[idx].sockfd, &pkt);
                     guardar_mensaje_historial(pkt.username, pkt.dest, pkt.data);
-
                 }
                 else
                 {
@@ -317,6 +329,7 @@ void *manejar_cliente(void *args)
 
         case ACEPTADO:
         {
+            printf("Recibido paquete ACEPTADO\n");
 
             int conn_idx = buscar_conexion(pkt.username, pkt.dest);
             if (conn_idx >= 0)
@@ -460,8 +473,6 @@ int main()
 
     for (int i = 0; i < MAX_CLIENTS; i++)
         clients[i].sockfd = 0;
-
-    printf("Servidor de chat iniciado en puerto %d\n", PORT);
 
     while (1)
     {
