@@ -263,7 +263,7 @@ def escuchar():
                     usuarios_pendientes.discard(usuario_invalido)
                     actualizar_listas()
                 messagebox.showerror("Error", mensaje)
-                continue
+
             
             else:
                 # Asumimos que es un error por nombre en uso u otro
