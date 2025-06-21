@@ -254,12 +254,16 @@ def escuchar():
 
                 actualizar_listas()
                 messagebox.showinfo("Desconexión", f"{usuario_desconectado} se ha desconectado. Ya no podés enviarle mensajes.")
+                continue
             
             if mensaje.startswith("El usuario ") and "no esta en linea" in mensaje:
-                ultimo_usuario= list(usuarios_pendientes)[-1]
-                usuarios_pendientes.discard(ultimo_usuario)
-                actualizar_listas()
+                partes = mensaje.split()
+                if len(partes) >= 3:
+                    usuario_invalido = partes[2]
+                    usuarios_pendientes.discard(usuario_invalido)
+                    actualizar_listas()
                 messagebox.showerror("Error", mensaje)
+                continue
             
             else:
                 # Asumimos que es un error por nombre en uso u otro
