@@ -1,7 +1,7 @@
 import socket
 
 MAX_RETRIES = 3
-TIMEOUT = 2  # segundos
+TIMEOUT = 2  
 
 server_ip = input("IP del servidor TFTP (ej: 192.168.1.10): ").strip()
 if not server_ip:
@@ -39,7 +39,6 @@ if operacion == "read":
 else:
     request_packet = WRQ + filename_bytes + mode_bytes
 
-# --- REINTENTOS DEL PRIMER PAQUETE ---
 retries = 0
 response_received = False
 server_addr = (server_ip, server_port)
@@ -140,7 +139,6 @@ elif operacion == "read":
                     try:
                         data, server_addr = sock.recvfrom(1024)
                         if len(data) >= 4 and data[1] == 5:
-                            # Error recibido
                             error_code = data[3]
                             error_msg = data[4:-1].decode(errors="replace")
                             print(f"\nERROR TFTP del servidor ({error_code}): {error_msg}\n")
@@ -149,7 +147,7 @@ elif operacion == "read":
                         if len(data) >= 4 and data[1] == 3:
                             block_number = int.from_bytes(data[2:4], byteorder='big')
                             received_data = data[4:]
-                            break  # Salimos del while retries para procesar el siguiente bloque
+                            break  
                         else:
                             print(f"Paquete inesperado: {data}")
                             retries += 1

@@ -237,7 +237,6 @@ def escuchar():
             area.tag_config("izq", justify="left")
             area.config(state=tk.DISABLED)
 
-
         elif codigo == CODIGO_ERROR:
             if mensaje.startswith("El usuario ") and "se ha desconectado" in mensaje:
                 usuario_desconectado = mensaje.split(" ")[2]
@@ -253,17 +252,17 @@ def escuchar():
 
                 actualizar_listas()
                 messagebox.showinfo("Desconexión", f"{usuario_desconectado} se ha desconectado. Ya no podés enviarle mensajes.")
+                continue
             
             if mensaje.startswith("El usuario ") and "no esta en linea" in mensaje:
-                ultimo_usuario= list(usuarios_pendientes)[-1]
-                usuarios_pendientes.discard(ultimo_usuario)
+                primer_usuario = list(usuarios_pendientes)[0]
+                usuarios_pendientes.discard(primer_usuario)
                 actualizar_listas()
                 messagebox.showerror("Error", mensaje)
             
             else:
                 # Asumimos que es un error por nombre en uso u otro
                 messagebox.showerror("Error", mensaje)
-
 
 def enviar():
     contacto = listbox_conexiones.get(tk.ACTIVE)
