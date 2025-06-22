@@ -1,137 +1,149 @@
 import socket
 
+# ANSI y emojis
+ROJO = '\033[91m'
+VERDE = '\033[92m'
+AMARILLO = '\033[93m'
+AZUL = '\033[94m'
+NEGRITA = '\033[1m'
+RESET = '\033[0m'
+
+def info(msg):
+    print(f"{AZUL}ℹ️  {msg}{RESET}")
+
+def exito(msg):
+    print(f"{VERDE}✅ {msg}{RESET}")
+
+def advertencia(msg):
+    print(f"{AMARILLO}⚠️  {msg}{RESET}")
+
+def error(msg):
+    print(f"{ROJO}❌ {msg}{RESET}")
+
 MAX_RETRIES = 3
 TIMEOUT = 2  
 
-server_ip = input("IP del servidor TFTP (ej: 192.168.1.10): ").strip()
+server_ip = input("🔌 IP del servidor TFTP (ej: 192.168.1.10): ").strip()
 if not server_ip:
-    print("Debés ingresar una IP.")
+    error("Debés ingresar una IP.")
     exit(1)
 
-server_port = input("Puerto del servidor [6969]: ").strip()
+server_port = input("📦 Puerto del servidor [6969]: ").strip()
 server_port = int(server_port) if server_port else 6969
 mode = "octet"
 
-operacion = input("¿Qué operación querés realizar? (read/write): ").strip().lower()
+operacion = input("📁 ¿Qué operación querés realizar? (read/write): ").strip().lower()
 if operacion not in ("read", "write"):
-    print("Operación inválida, debe ser 'read' o 'write'.")
+    error("Operación inválida, debe ser 'read' o 'write'.")
     exit(1)
 
-filename = input("Nombre del archivo: ").strip()
+filename = input("📝 Nombre del archivo: ").strip()
 if not filename:
-    print("Debés ingresar un nombre de archivo.")
+    error("Debés ingresar un nombre de archivo.")
     exit(1)
 
-# Códigos de operación (OPCODE)
-RRQ = (1).to_bytes(2, byteorder='big')
-WRQ = (2).to_bytes(2, byteorder='big')
-DATA = (3).to_bytes(2, byteorder='big')
-ACK = (4).to_bytes(2, byteorder='big')
+RRQ = (1).to_bytes(2, 'big')
+WRQ = (2).to_bytes(2, 'big')
+DATA = (3).to_bytes(2, 'big')
+ACK = (4).to_bytes(2, 'big')
 
-# Crear socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.settimeout(TIMEOUT)
 
 filename_bytes = filename.encode() + b'\x00'
 mode_bytes = mode.encode() + b'\x00'
-if operacion == "read":
-    request_packet = RRQ + filename_bytes + mode_bytes
-else:
-    request_packet = WRQ + filename_bytes + mode_bytes
+request_packet = (RRQ if operacion == "read" else WRQ) + filename_bytes + mode_bytes
 
+# --- ENVÍO INICIAL CON REINTENTOS ---
 retries = 0
 response_received = False
 server_addr = (server_ip, server_port)
 
 while retries < MAX_RETRIES and not response_received:
-    print(f"Enviado paquete {'RRQ' if operacion == 'read' else 'WRQ'} (intento {retries+1})")
+    info(f"Enviando paquete {'RRQ' if operacion == 'read' else 'WRQ'} (intento {retries + 1})")
     sock.sendto(request_packet, server_addr)
-
     try:
         data, server_addr = sock.recvfrom(1024)
         response_received = True
     except socket.timeout:
-        print("Timeout esperando respuesta del servidor, reintentando...")
+        advertencia("Timeout esperando respuesta del servidor. Reintentando...")
         retries += 1
-        
+
 if not response_received:
-    print("No se recibió respuesta del servidor después de 3 intentos. Abandonando.")
+    error("No se recibió respuesta después de 3 intentos. Abandonando.")
     sock.close()
     exit(1)
 
+# --- MANEJO DE ERRORES ---
 if len(data) >= 4 and data[1] == 5:
     error_code = data[3]
     error_msg = data[4:-1].decode(errors="replace")
-    print(f"\nERROR TFTP del servidor ({error_code}): {error_msg}\n")
+    error(f"ERROR TFTP ({error_code}): {error_msg}")
     sock.close()
     exit(1)
 
+# --- TRANSFERENCIA WRITE ---
 if operacion == 'write':
     if len(data) == 4 and data[1] == 4:
-        print("ACK recibido, comenzando envio")
+        exito("ACK recibido. Comenzando envío...")
         try:
             with open(filename, "rb") as f:
                 block_number = 1
                 while True:
                     filedata = f.read(512)
                     if not filedata:
-                        print("Fin del archivo alcanzado.")
+                        exito("Fin del archivo alcanzado.")
                         break
 
-                    block = block_number.to_bytes(2, byteorder='big')
-                    data_packet = DATA + block + filedata
-
-                    retries = 0
+                    data_packet = DATA + block_number.to_bytes(2, 'big') + filedata
                     ack_received = False
+                    retries = 0
 
                     while retries < MAX_RETRIES and not ack_received:
                         sock.sendto(data_packet, server_addr)
-
-                        print(f"Enviado DATA bloque {block_number} (intento {retries + 1})")
+                        info(f"📤 Enviado bloque {block_number} (intento {retries + 1})")
                         try:
                             ack_data, _ = sock.recvfrom(1024)
                             if len(ack_data) >= 4 and ack_data[1] == 5:
-                                # Error recibido
-                                error_code = ack_data[3]
-                                error_msg = ack_data[4:-1].decode(errors="replace")
-                                print(f"\nERROR TFTP del servidor ({error_code}): {error_msg}\n")
+                                error(f"TFTP ERROR ({ack_data[3]}): {ack_data[4:-1].decode(errors='replace')}")
                                 sock.close()
                                 exit(1)
-                            if len(ack_data) == 4 and ack_data[1] == 4 and ack_data[2:4] == block:
-                                print(f"ACK recibido para bloque {block_number}")
+                            if ack_data[1] == 4 and ack_data[2:4] == block_number.to_bytes(2, 'big'):
+                                exito(f"ACK recibido para bloque {block_number}")
                                 ack_received = True
                             else:
-                                print(f"ACK inválido o inesperado: {ack_data}")
+                                advertencia("ACK inválido o inesperado.")
                                 retries += 1
                         except socket.timeout:
-                            print(f"Timeout esperando ACK del bloque {block_number}, reintentando...")
+                            advertencia("Timeout esperando ACK. Reintentando...")
                             retries += 1
 
                     if not ack_received:
-                        print(f"No se recibió ACK para el bloque {block_number} después de {MAX_RETRIES} intentos. Abandonando la transferencia.")
+                        error(f"Sin ACK para bloque {block_number}. Abortando.")
                         break
 
                     block_number += 1
         except FileNotFoundError:
-            print(f"El archivo '{filename}' no fue encontrado.")
+            error(f"El archivo '{filename}' no fue encontrado.")
     else:
-        print(f"Respuesta inesperada del servidor: {data}")
+        advertencia(f"Respuesta inesperada: {data}")
 
-elif operacion == "read":
+# --- TRANSFERENCIA READ ---
+elif operacion == 'read':
     if len(data) >= 4 and data[1] == 3:
-        block_number = int.from_bytes(data[2:4], byteorder='big')
+        block_number = int.from_bytes(data[2:4], 'big')
         received_data = data[4:]
 
         with open("descarga_" + filename, "wb") as f:
-            print(f"Recibiendo datos para '{filename}'...")
+            info(f"Descargando '{filename}'...")
             while True:
                 f.write(received_data)
-                print(f"Bloque recibido: {block_number} ({len(received_data)} bytes)")
+                exito(f"📥 Bloque {block_number} ({len(received_data)} bytes)")
                 ack_packet = ACK + data[2:4]
                 sock.sendto(ack_packet, server_addr)
 
                 if len(received_data) < 512:
-                    print("Fin de la transferencia.")
+                    exito("Transferencia finalizada correctamente.")
                     break
 
                 retries = 0
@@ -139,26 +151,24 @@ elif operacion == "read":
                     try:
                         data, server_addr = sock.recvfrom(1024)
                         if len(data) >= 4 and data[1] == 5:
-                            error_code = data[3]
-                            error_msg = data[4:-1].decode(errors="replace")
-                            print(f"\nERROR TFTP del servidor ({error_code}): {error_msg}\n")
+                            error(f"TFTP ERROR ({data[3]}): {data[4:-1].decode(errors='replace')}")
                             sock.close()
                             exit(1)
-                        if len(data) >= 4 and data[1] == 3:
-                            block_number = int.from_bytes(data[2:4], byteorder='big')
+                        if data[1] == 3:
+                            block_number = int.from_bytes(data[2:4], 'big')
                             received_data = data[4:]
-                            break  
+                            break
                         else:
-                            print(f"Paquete inesperado: {data}")
+                            advertencia("Paquete inesperado.")
                             retries += 1
                     except socket.timeout:
-                        print(f"Timeout esperando DATA. Reintentando ({retries + 1}/{MAX_RETRIES})...")
+                        advertencia("Timeout esperando DATA. Reintentando...")
                         retries += 1
 
                 if retries == MAX_RETRIES:
-                    print("No se recibió el siguiente bloque después de 3 intentos. Transferencia abortada.")
+                    error("No se recibió el siguiente bloque. Transferencia abortada.")
                     break
     else:
-        print(f"Respuesta inesperada del servidor: {data}")
+        advertencia(f"Respuesta inesperada: {data}")
 
 sock.close()
