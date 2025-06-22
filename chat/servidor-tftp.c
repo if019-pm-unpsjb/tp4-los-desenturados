@@ -5,8 +5,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <sys/time.h> // Para struct timeval
-
+#include <sys/time.h>
 
 #define PORT 6969
 #define MAX_RETRIES 5
@@ -14,7 +13,7 @@
 int retries = 0;
 unsigned char last_ack[4];
 int last_block = 0;
-// Enviar paquete de error TFTP
+
 void send_tftp_error(int sockfd, struct sockaddr_in *cliaddr, socklen_t len,
                      unsigned short error_code, const char *err_msg)
 {
@@ -22,16 +21,15 @@ void send_tftp_error(int sockfd, struct sockaddr_in *cliaddr, socklen_t len,
     size_t msg_len = strlen(err_msg);
 
     pkt[0] = 0x00;
-    pkt[1] = 0x05; // Opcode ERROR
+    pkt[1] = 0x05; 
     pkt[2] = 0x00;
-    pkt[3] = error_code; // Código de error (ver lista)
+    pkt[3] = error_code;
     memcpy(&pkt[4], err_msg, msg_len);
-    pkt[4 + msg_len] = 0x00; // Fin de string
+    pkt[4 + msg_len] = 0x00; 
 
     sendto(sockfd, pkt, 5 + msg_len, 0, (struct sockaddr *)cliaddr, len);
 }
 
-// Para evitar procesos zombies
 void reap_children(int sig)
 {
     (void)sig;
@@ -39,7 +37,7 @@ void reap_children(int sig)
         ;
 }
 
-// Lógica de transferencia (el hijo hace TODO esto)
+
 void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in cliaddr, socklen_t len)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -51,12 +49,27 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
     unsigned char buffer[1024];
     printf("Atendiendo cliente PID=%d, archivo=%s, modo=%s, opcode=%d\n", getpid(), filename, mode, opcode);
+    if (strcasecmp(mode, "octet") != 0)
+    {
+        send_tftp_error(sockfd, &cliaddr, len, 0, "Modo no soportado");
+        close(sockfd);
+        exit(1);
+    }
 
     if (opcode == 2)
     { // WRQ
         unsigned char ack[4] = {0, 4, 0, 0};
         sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
         printf("ACK enviado al cliente (block 0)\n");
+
+        FILE *check = fopen(filename, "rb");
+        if (check != NULL)
+        {
+            fclose(check);
+            send_tftp_error(sockfd, &cliaddr, len, 6, "Archivo ya existe");
+            close(sockfd);
+            exit(1);
+        }
 
         FILE *f = fopen(filename, "wb");
         if (!f)
@@ -87,7 +100,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             }
             else if (activity == 0)
             {
-                // Timeout: reenviar ACK
                 if (retries >= MAX_RETRIES)
                 {
                     printf("Se alcanzó el máximo de reintentos. Cancelando transferencia.\n");
@@ -106,7 +118,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 perror("recvfrom DATA error");
                 break;
             }
-            retries = 0; // Reset si llega algo
+            retries = 0; 
 
             int data_opcode = (buffer[0] << 8) | buffer[1];
             if (data_opcode == 3) // DATA
@@ -121,7 +133,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 last_ack[2] = buffer[2];
                 last_ack[3] = buffer[3];
 
-                unsigned char ack_data[4] = {0, 4, buffer[2], buffer[3]};
                 sendto(sockfd, last_ack, 4, 0, (struct sockaddr *)&cliaddr, len);
                 printf("ACK enviado para bloque %d\n", block_num);
 
@@ -151,7 +162,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
         int retries;
 
         data_packet[0] = 0;
-        data_packet[1] = 3; // Opcode DATA
+        data_packet[1] = 3;
 
         while (1)
         {
@@ -215,7 +226,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 if (ack_opcode == 4 && ack_block == block_number)
                 {
                     printf("Recibido ACK, bloque: %d\n", ack_block);
-                    break; // Salir del bucle de reintentos
+                    break; 
                 }
                 else
                 {
@@ -246,7 +257,6 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
 int main()
 {
-    // Evita procesos zombies
     signal(SIGCHLD, reap_children);
 
     int sockfd;
@@ -272,7 +282,7 @@ int main()
         exit(1);
     }
 
-    printf("Servidor UDP esperando paquetes...\n");
+    printf("Servidor TFTP inicializado...\n");
 
     socklen_t len = sizeof(cliaddr);
 
@@ -293,14 +303,10 @@ int main()
             char filename[100], mode[20];
             char *ptr = (char *)&data[2];
 
-            // Copiar filename desde ptr
             strncpy(filename, ptr, sizeof(filename) - 1);
             filename[sizeof(filename) - 1] = '\0';
 
-            // Avanzar ptr más allá del filename y su terminador nulo
             ptr += strlen(ptr) + 1;
-
-            // Copiar mode desde la nueva posición
             strncpy(mode, ptr, sizeof(mode) - 1);
             mode[sizeof(mode) - 1] = '\0';
 
@@ -312,16 +318,12 @@ int main()
             }
             if (pid == 0)
             {
-                // HIJO: atiende al cliente
-                close(sockfd); // El hijo no usa el socket principal
+                close(sockfd); 
                 handle_transfer(opcode, filename, mode, cliaddr, len);
-                // Nunca vuelve acá
             }
-            // PADRE: sigue escuchando
         }
         else
         {
-            // Paquete desconocido: ignorar o responder error si querés
             send_tftp_error(sockfd, &cliaddr, len, 4, "Operación TFTP ilegal");
         }
     }
