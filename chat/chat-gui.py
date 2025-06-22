@@ -23,6 +23,7 @@ cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  
 # Conexión
 SERVIDOR = "127.0.0.1"
+
 PUERTO = 28008
 
 listbox_conexiones = None  # Inicialización
@@ -255,10 +256,15 @@ def escuchar():
                 continue
             
             if mensaje.startswith("El usuario ") and "no esta en linea" in mensaje:
-                primer_usuario = list(usuarios_pendientes)[0]
-                usuarios_pendientes.discard(primer_usuario)
-                actualizar_listas()
+
+                partes = mensaje.split()
+                if len(partes) >= 3:
+                    usuario_invalido = partes[2]
+                    usuarios_pendientes.discard(usuario_invalido)
+                    actualizar_listas()
+
                 messagebox.showerror("Error", mensaje)
+
             
             else:
                 # Asumimos que es un error por nombre en uso u otro
