@@ -30,8 +30,8 @@ listbox_conexiones = None  # Inicialización
 
 # Cliente TCP
 usuarios_conectados = set()
-usuarios_pendientes = set()
-usuarios_pendientes_entrantes = set()
+solicitudes_enviadas = set()
+solicitudes_recibidas = set()
 USUARIO = None
 
 
@@ -55,31 +55,36 @@ def recv_exact(sock, size):
 
 
 def actualizar_listas():
-
     listbox_conexiones.delete(0, tk.END)
     for usuario in sorted(usuarios_conectados):
         listbox_conexiones.insert(tk.END, usuario)
 
+    print("[ACT LISTAS] usuarios_conectados:", usuarios_conectados)
+    print("[ACT LISTAS] solicitudes_enviadas:", solicitudes_enviadas)
+    print("[ACT LISTAS] solicitudes_recibidas:", solicitudes_recibidas)
 
     # Limpiar frame pendientes
     for widget in frame_pendientes_usuarios.winfo_children():
         widget.destroy()
 
-    # Mostrar pendientes
-    for usuario in sorted(usuarios_pendientes):
+    # Mostrar combinadas: enviados + recibidos (sin duplicar)
+    todos = sorted(solicitudes_enviadas.union(solicitudes_recibidas))
+    for usuario in todos:
         fila = tk.Frame(frame_pendientes_usuarios)
         fila.pack(fill=tk.X, pady=1, padx=2)
 
         lbl = tk.Label(fila, text=usuario, width=12, anchor="w")
         lbl.pack(side=tk.LEFT)
 
-        if usuario in usuarios_pendientes_entrantes:
+        if usuario in solicitudes_recibidas:
+            # Solicitud ENTRANTE: puedo aceptar o rechazar
             btn_aceptar = tk.Button(fila, text="✓", fg="green", width=2, command=lambda u=usuario: aceptar_usuario(u))
             btn_aceptar.pack(side=tk.LEFT, padx=2)
 
             btn_rechazar = tk.Button(fila, text="✗", fg="red", width=2, command=lambda u=usuario: rechazar_usuario(u))
             btn_rechazar.pack(side=tk.LEFT)
-        else:
+        elif usuario in solicitudes_enviadas:
+            # Solicitud SALIENTE: solo mostrar estado pendiente
             lbl_pendiente = tk.Label(fila, text="(pendiente)", fg="gray")
             lbl_pendiente.pack(side=tk.LEFT, padx=4)
 
@@ -99,8 +104,15 @@ def mostrar_chat_para(contacto):
 def aceptar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_ACEPTADO, USUARIO.encode(), usuario.encode()))
     usuarios_conectados.add(usuario)
-    usuarios_pendientes.discard(usuario)
+    solicitudes_enviadas.discard(usuario)
+    solicitudes_recibidas.discard(usuario)
+    
+    print("[ACEPTAR] usuarios_conectados:", usuarios_conectados)
+    print("[ACEPTAR] solicitudes_enviadas:", solicitudes_enviadas)
+    print("[ACEPTAR] solicitudes_recibidas:", solicitudes_recibidas)
+
     actualizar_listas()
+    
     if usuario not in areas_chat:
         area_nueva = scrolledtext.ScrolledText(frame_derecha, width=60, height=20, font=("Segoe UI", 10), bg="#f0f8ff")
         area_nueva.pack_forget()
@@ -108,19 +120,34 @@ def aceptar_usuario(usuario):
         areas_chat[usuario] = area_nueva
 
 
+
 def rechazar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_RECHAZADO, USUARIO.encode(), usuario.encode()))
-    usuarios_pendientes.discard(usuario)
+    solicitudes_recibidas.discard(usuario)
+
+    print("[RECHAZAR] usuarios_conectados:", usuarios_conectados)
+    print("[RECHAZAR] solicitudes_enviadas:", solicitudes_enviadas)
+    print("[RECHAZAR] solicitudes_recibidas:", solicitudes_recibidas)
+
     actualizar_listas()
 
+    
 
 def agregar_conexion():
     destino = simpledialog.askstring("Nueva conexión", "Nombre de usuario a contactar:")
     if not destino or destino == USUARIO:
         return
+    if destino in usuarios_conectados:
+        return
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), destino.encode(), b""))
-    usuarios_pendientes.add(destino)
+    solicitudes_enviadas.add(destino)
+
+    print("[AGREGAR CONEXIÓN] usuarios_conectados:", usuarios_conectados)
+    print("[AGREGAR CONEXIÓN] solicitudes_enviadas:", solicitudes_enviadas)
+    print("[AGREGAR CONEXIÓN] solicitudes_recibidas:", solicitudes_recibidas)
+
     actualizar_listas()
+
 
 
 from pathlib import Path
@@ -197,8 +224,8 @@ def escuchar():
 
         if codigo == CODIGO_MENSAJE:
             if emisor not in usuarios_conectados:
-                usuarios_pendientes.add(emisor)
-                usuarios_pendientes_entrantes.add(emisor)
+                #solicitudes_enviadas.add(emisor)
+                solicitudes_recibidas.add(emisor)
                 actualizar_listas()
             area.config(state=tk.NORMAL)
             area.insert(tk.END, f"{emisor}: {mensaje}\n")
@@ -208,11 +235,12 @@ def escuchar():
 
         elif codigo == CODIGO_ACEPTADO:
             usuarios_conectados.add(emisor)
-            usuarios_pendientes.discard(emisor)
+            solicitudes_enviadas.discard(emisor)
             actualizar_listas()
+        
 
         elif codigo == CODIGO_RECHAZADO:
-            usuarios_pendientes.discard(emisor)
+            solicitudes_enviadas.discard(emisor)
             actualizar_listas()
             
         elif codigo == CODIGO_FILE:
@@ -256,13 +284,11 @@ def escuchar():
                 continue
             
             if mensaje.startswith("El usuario ") and "no esta en linea" in mensaje:
-
                 partes = mensaje.split()
                 if len(partes) >= 3:
                     usuario_invalido = partes[2]
-                    usuarios_pendientes.discard(usuario_invalido)
+                    solicitudes_enviadas.discard(usuario_invalido)
                     actualizar_listas()
-
                 messagebox.showerror("Error", mensaje)
 
             
