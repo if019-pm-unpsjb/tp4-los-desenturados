@@ -45,11 +45,11 @@ typedef struct
 
 typedef struct
 {
-    int code;                    // codigo del paquete
-    char username[MAX_NAME_LEN]; // emisor
-    char dest[MAX_NAME_LEN];     // receptor
-    int datalen;                 // long del msg/archivo
-    char data[4096];             // msg/Archivo
+    int code;                    
+    char username[MAX_NAME_LEN]; 
+    char dest[MAX_NAME_LEN];    
+    int datalen;                 
+    char data[4096];             
 } packet_t;
 
 typedef struct
@@ -58,11 +58,6 @@ typedef struct
     char username[32];
     int acuerdod; // 0 = esperando 1 = listo para chat
 } client_t;
-
-/* typedef struct {
-    int client_idx;
-    packet_t pkt;
-} thread_args_t; */
 
 typedef struct {
     char usuario1[MAX_NAME_LEN];
@@ -133,7 +128,7 @@ void eliminar_conexiones_de_usuario(const char *username) {
 
             int idx_otro = encontrar_cliente_por_nombre(otro_usuario);
             if (idx_otro >= 0) {
-                packet_t aviso = {.code = ERROR}; // O podés definir un nuevo código como DESCONECTADO
+                packet_t aviso = {.code = ERROR}; 
                 strncpy(aviso.username, "server", MAX_NAME_LEN);
                 strncpy(aviso.dest, otro_usuario, MAX_NAME_LEN);
                 aviso.datalen = snprintf(aviso.data, sizeof(aviso.data),
@@ -151,7 +146,6 @@ void eliminar_conexiones_de_usuario(const char *username) {
                     j--;
                 }
             }
-
             // Eliminar conexión
             for (int k = i; k < num_conexiones - 1; k++) {
                 conexiones[k] = conexiones[k + 1];
@@ -223,8 +217,6 @@ void *manejar_cliente(void *args)
     thread_args_t *targs = (thread_args_t *)args;
     int client_idx = targs->client_idx;
     free(targs);
-
-    printf("[DEBUG] ENTRE AL MANEJAR CLIENTE");
     int sd = clients[client_idx].sockfd;
     packet_t pkt;
     while (1)
@@ -238,12 +230,9 @@ void *manejar_cliente(void *args)
             eliminar_conexiones_de_usuario(clients[client_idx].username);
             break;
         }
-        printf("[DEBUG] INICIAL Recibido código %d de %s -> %s\n", pkt.code, pkt.username, pkt.dest);
         // Manejo de handshake inicial
         if (clients[client_idx].acuerdod == 0)
         {
-            int idx = encontrar_cliente_por_nombre(pkt.dest);
-
             if (encontrar_cliente_por_nombre(pkt.username)<0){
                 if (pkt.code == SYN)
                 {
@@ -334,7 +323,7 @@ void *manejar_cliente(void *args)
             int conn_idx = buscar_conexion(pkt.username, pkt.dest);
             if (conn_idx >= 0)
             {
-                // Acepta si hay una conexión pendiente donde el otro usuario fue el solicitante
+                // Acepta si hay una conexión pendiente donde el otro usuario fue el que la solicito
                 if (conexiones[conn_idx].estado == PENDIENTE)
                 {
                     conexiones[conn_idx].estado = CONECTADO;
