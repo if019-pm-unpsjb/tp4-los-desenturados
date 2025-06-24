@@ -121,7 +121,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             retries = 0;
 
             int data_opcode = (buffer[0] << 8) | buffer[1];
-            if (data_opcode == 3) // DATA
+            if (data_opcode == 3) 
             {
                 int block_num = (buffer[2] << 8) | buffer[3];
                 int data_len = n - 4;

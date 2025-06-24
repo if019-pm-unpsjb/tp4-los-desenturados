@@ -3,9 +3,8 @@ import threading
 import struct
 import tkinter as tk
 from tkinter import simpledialog, messagebox, scrolledtext, filedialog
-import os
+from pathlib import Path
 
-# Códigos
 CODIGO_SYN = 0
 CODIGO_ACK = 1
 CODIGO_MENSAJE = 2
@@ -15,20 +14,13 @@ CODIGO_ACEPTADO = 5
 CODIGO_RECHAZADO = 6
 CODIGO_ERROR = 7
 
-
-listbox_conexiones = None  # Inicialización
-
-# Cliente TCP
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  
-# Conexión
 SERVIDOR = "127.0.0.1"
 
 PUERTO = 28008
 
-listbox_conexiones = None  # Inicialización
-
-# Cliente TCP
+listbox_conexiones = None  
 usuarios_conectados = set()
 solicitudes_enviadas = set()
 solicitudes_recibidas = set()
@@ -105,15 +97,11 @@ def aceptar_usuario(usuario):
         area_nueva.config(state=tk.DISABLED)
         areas_chat[usuario] = area_nueva
 
-
-
 def rechazar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_RECHAZADO, USUARIO.encode(), usuario.encode()))
     solicitudes_recibidas.discard(usuario)
     actualizar_listas()
-
     
-
 def agregar_conexion():
     destino = simpledialog.askstring("Nueva conexión", "Nombre de usuario a contactar:")
     if not destino or destino == USUARIO:
@@ -123,10 +111,6 @@ def agregar_conexion():
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), destino.encode(), b""))
     solicitudes_enviadas.add(destino)
     actualizar_listas()
-
-
-
-from pathlib import Path
 
 def enviar_archivo():
     contacto = listbox_conexiones.get(tk.ACTIVE)
@@ -341,12 +325,10 @@ listbox_conexiones.pack(fill=tk.BOTH, expand=True)
 listbox_conexiones.bind("<<ListboxSelect>>", lambda e: mostrar_chat_para(listbox_conexiones.get(tk.ACTIVE)))
 label_usuario_logeado = None 
 
-# Subframe para conexiones pendientes
 frame_pendientes = tk.Frame(frame_izquierda)
 frame_pendientes.pack(fill=tk.BOTH, expand=True)
 tk.Label(frame_pendientes, text="Conexiones pendientes").pack()
 
-# Scrollable frame para los pendientes
 canvas = tk.Canvas(frame_pendientes, height=150)
 scrollbar = tk.Scrollbar(frame_pendientes, orient="vertical", command=canvas.yview)
 frame_pendientes_usuarios = tk.Frame(canvas)
@@ -362,7 +344,6 @@ canvas.configure(yscrollcommand=scrollbar.set)
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
 
-# Panel derecho: chat
 frame_derecha = tk.Frame(frame_principal)
 frame_derecha.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 label_usuario_logeado = tk.Label(frame_derecha, text="Usuario logueado: ", font=("Arial", 10, "bold"))
