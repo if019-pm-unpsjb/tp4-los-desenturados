@@ -1,6 +1,5 @@
 import socket
 
-# ANSI y emojis
 ROJO = '\033[91m'
 VERDE = '\033[92m'
 AMARILLO = '\033[93m'
@@ -54,7 +53,6 @@ filename_bytes = filename.encode() + b'\x00'
 mode_bytes = mode.encode() + b'\x00'
 request_packet = (RRQ if operacion == "read" else WRQ) + filename_bytes + mode_bytes
 
-# --- ENVÍO INICIAL CON REINTENTOS ---
 retries = 0
 response_received = False
 server_addr = (server_ip, server_port)
