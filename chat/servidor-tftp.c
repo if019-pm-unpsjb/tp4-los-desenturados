@@ -21,11 +21,11 @@ void send_tftp_error(int sockfd, struct sockaddr_in *cliaddr, socklen_t len,
     size_t msg_len = strlen(err_msg);
 
     pkt[0] = 0x00;
-    pkt[1] = 0x05; 
+    pkt[1] = 0x05;
     pkt[2] = 0x00;
     pkt[3] = error_code;
     memcpy(&pkt[4], err_msg, msg_len);
-    pkt[4 + msg_len] = 0x00; 
+    pkt[4 + msg_len] = 0x00;
 
     sendto(sockfd, pkt, 5 + msg_len, 0, (struct sockaddr *)cliaddr, len);
 }
@@ -36,7 +36,6 @@ void reap_children(int sig)
     while (waitpid(-1, NULL, WNOHANG) > 0)
         ;
 }
-
 
 void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in cliaddr, socklen_t len)
 {
@@ -58,10 +57,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
     if (opcode == 2)
     { // WRQ
-        unsigned char ack[4] = {0, 4, 0, 0};
-        sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
-        printf("ACK enviado al cliente (block 0)\n");
-
+        
         FILE *check = fopen(filename, "rb");
         if (check != NULL)
         {
@@ -70,7 +66,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             close(sockfd);
             exit(1);
         }
-
+        
         FILE *f = fopen(filename, "wb");
         if (!f)
         {
@@ -79,6 +75,11 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             close(sockfd);
             exit(1);
         }
+        
+        unsigned char ack[4] = {0, 4, 0, 0};
+        memcpy(last_ack, ack, 4);
+        sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
+        printf("ACK enviado al cliente (block 0)\n");
 
         while (1)
         {
@@ -118,10 +119,10 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 perror("recvfrom DATA error");
                 break;
             }
-            retries = 0; 
+            retries = 0;
 
             int data_opcode = (buffer[0] << 8) | buffer[1];
-            if (data_opcode == 3) // DATA
+            if (data_opcode == 3) 
             {
                 int block_num = (buffer[2] << 8) | buffer[3];
                 int data_len = n - 4;
@@ -130,15 +131,23 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 fwrite(&buffer[4], 1, data_len, f);
 
                 last_block = block_num;
+                last_ack[0] = 0;
+                last_ack[1] = 4;
                 last_ack[2] = buffer[2];
                 last_ack[3] = buffer[3];
 
                 sendto(sockfd, last_ack, 4, 0, (struct sockaddr *)&cliaddr, len);
                 printf("ACK enviado para bloque %d\n", block_num);
 
+                if (data_len == 0)
+                {
+                    printf("Recibido bloque final vacío. Transferencia completada\n");
+                    break;
+                }
+
                 if (data_len < 512)
                 {
-                    printf("Transferencia completada\n");
+                    printf("Bloque final recibido. Transferencia completada\n");
                     break;
                 }
             }
@@ -226,7 +235,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
                 if (ack_opcode == 4 && ack_block == block_number)
                 {
                     printf("Recibido ACK, bloque: %d\n", ack_block);
-                    break; 
+                    break;
                 }
                 else
                 {
@@ -318,7 +327,7 @@ int main()
             }
             if (pid == 0)
             {
-                close(sockfd); 
+                close(sockfd);
                 handle_transfer(opcode, filename, mode, cliaddr, len);
             }
         }

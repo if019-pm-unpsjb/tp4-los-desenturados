@@ -3,9 +3,8 @@ import threading
 import struct
 import tkinter as tk
 from tkinter import simpledialog, messagebox, scrolledtext, filedialog
-import os
+from pathlib import Path
 
-# Códigos
 CODIGO_SYN = 0
 CODIGO_ACK = 1
 CODIGO_MENSAJE = 2
@@ -15,20 +14,13 @@ CODIGO_ACEPTADO = 5
 CODIGO_RECHAZADO = 6
 CODIGO_ERROR = 7
 
-
-listbox_conexiones = None  # Inicialización
-
-# Cliente TCP
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 areas_chat = {}  
-# Conexión
 SERVIDOR = "127.0.0.1"
 
 PUERTO = 28008
 
-listbox_conexiones = None  # Inicialización
-
-# Cliente TCP
+listbox_conexiones = None  
 usuarios_conectados = set()
 solicitudes_enviadas = set()
 solicitudes_recibidas = set()
@@ -59,15 +51,8 @@ def actualizar_listas():
     for usuario in sorted(usuarios_conectados):
         listbox_conexiones.insert(tk.END, usuario)
 
-    print("[ACT LISTAS] usuarios_conectados:", usuarios_conectados)
-    print("[ACT LISTAS] solicitudes_enviadas:", solicitudes_enviadas)
-    print("[ACT LISTAS] solicitudes_recibidas:", solicitudes_recibidas)
-
-    # Limpiar frame pendientes
     for widget in frame_pendientes_usuarios.winfo_children():
         widget.destroy()
-
-    # Mostrar combinadas: enviados + recibidos (sin duplicar)
     todos = sorted(solicitudes_enviadas.union(solicitudes_recibidas))
     for usuario in todos:
         fila = tk.Frame(frame_pendientes_usuarios)
@@ -77,14 +62,12 @@ def actualizar_listas():
         lbl.pack(side=tk.LEFT)
 
         if usuario in solicitudes_recibidas:
-            # Solicitud ENTRANTE: puedo aceptar o rechazar
             btn_aceptar = tk.Button(fila, text="✓", fg="green", width=2, command=lambda u=usuario: aceptar_usuario(u))
             btn_aceptar.pack(side=tk.LEFT, padx=2)
 
             btn_rechazar = tk.Button(fila, text="✗", fg="red", width=2, command=lambda u=usuario: rechazar_usuario(u))
             btn_rechazar.pack(side=tk.LEFT)
         elif usuario in solicitudes_enviadas:
-            # Solicitud SALIENTE: solo mostrar estado pendiente
             lbl_pendiente = tk.Label(fila, text="(pendiente)", fg="gray")
             lbl_pendiente.pack(side=tk.LEFT, padx=4)
 
@@ -106,11 +89,6 @@ def aceptar_usuario(usuario):
     usuarios_conectados.add(usuario)
     solicitudes_enviadas.discard(usuario)
     solicitudes_recibidas.discard(usuario)
-    
-    print("[ACEPTAR] usuarios_conectados:", usuarios_conectados)
-    print("[ACEPTAR] solicitudes_enviadas:", solicitudes_enviadas)
-    print("[ACEPTAR] solicitudes_recibidas:", solicitudes_recibidas)
-
     actualizar_listas()
     
     if usuario not in areas_chat:
@@ -119,20 +97,11 @@ def aceptar_usuario(usuario):
         area_nueva.config(state=tk.DISABLED)
         areas_chat[usuario] = area_nueva
 
-
-
 def rechazar_usuario(usuario):
     cliente.sendall(construir_paquete(CODIGO_RECHAZADO, USUARIO.encode(), usuario.encode()))
     solicitudes_recibidas.discard(usuario)
-
-    print("[RECHAZAR] usuarios_conectados:", usuarios_conectados)
-    print("[RECHAZAR] solicitudes_enviadas:", solicitudes_enviadas)
-    print("[RECHAZAR] solicitudes_recibidas:", solicitudes_recibidas)
-
     actualizar_listas()
-
     
-
 def agregar_conexion():
     destino = simpledialog.askstring("Nueva conexión", "Nombre de usuario a contactar:")
     if not destino or destino == USUARIO:
@@ -141,16 +110,7 @@ def agregar_conexion():
         return
     cliente.sendall(construir_paquete(CODIGO_MENSAJE, USUARIO.encode(), destino.encode(), b""))
     solicitudes_enviadas.add(destino)
-
-    print("[AGREGAR CONEXIÓN] usuarios_conectados:", usuarios_conectados)
-    print("[AGREGAR CONEXIÓN] solicitudes_enviadas:", solicitudes_enviadas)
-    print("[AGREGAR CONEXIÓN] solicitudes_recibidas:", solicitudes_recibidas)
-
     actualizar_listas()
-
-
-
-from pathlib import Path
 
 def enviar_archivo():
     contacto = listbox_conexiones.get(tk.ACTIVE)
@@ -164,12 +124,10 @@ def enviar_archivo():
     area = areas_chat.get(contacto)
     if not area:
         return
-
-    # Obtener solo el nombre (sin ruta)
+    
     nombre_archivo = Path(filepath).name
     nombre_bytes = nombre_archivo.encode("utf-8")
 
-    # Enviar primer paquete con el nombre del archivo
     paquete_nombre = construir_paquete(
         CODIGO_FILE,
         usuario=USUARIO.encode(),
@@ -224,7 +182,6 @@ def escuchar():
 
         if codigo == CODIGO_MENSAJE:
             if emisor not in usuarios_conectados:
-                #solicitudes_enviadas.add(emisor)
                 solicitudes_recibidas.add(emisor)
                 actualizar_listas()
             area.config(state=tk.NORMAL)
@@ -244,7 +201,6 @@ def escuchar():
             actualizar_listas()
             
         elif codigo == CODIGO_FILE:
-            # Primer mensaje: nombre del archivo
             nombre_archivo = contenido[:longitud_datos].decode(errors="replace")
             archivo_recibido = f"archivo_de_{emisor}_{nombre_archivo}"
             area.config(state=tk.NORMAL)
@@ -293,7 +249,6 @@ def escuchar():
 
             
             else:
-                # Asumimos que es un error por nombre en uso u otro
                 messagebox.showerror("Error", mensaje)
 
 def enviar():
@@ -368,14 +323,12 @@ tk.Label(frame_izquierda, text="Conexiones aceptadas").pack()
 listbox_conexiones = tk.Listbox(frame_izquierda, width=25)
 listbox_conexiones.pack(fill=tk.BOTH, expand=True)
 listbox_conexiones.bind("<<ListboxSelect>>", lambda e: mostrar_chat_para(listbox_conexiones.get(tk.ACTIVE)))
-label_usuario_logeado = None  # antes del mainloop
+label_usuario_logeado = None 
 
-# Subframe para conexiones pendientes
 frame_pendientes = tk.Frame(frame_izquierda)
 frame_pendientes.pack(fill=tk.BOTH, expand=True)
 tk.Label(frame_pendientes, text="Conexiones pendientes").pack()
 
-# Scrollable frame para los pendientes
 canvas = tk.Canvas(frame_pendientes, height=150)
 scrollbar = tk.Scrollbar(frame_pendientes, orient="vertical", command=canvas.yview)
 frame_pendientes_usuarios = tk.Frame(canvas)
@@ -391,7 +344,6 @@ canvas.configure(yscrollcommand=scrollbar.set)
 canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
 
-# Panel derecho: chat
 frame_derecha = tk.Frame(frame_principal)
 frame_derecha.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 label_usuario_logeado = tk.Label(frame_derecha, text="Usuario logueado: ", font=("Arial", 10, "bold"))
