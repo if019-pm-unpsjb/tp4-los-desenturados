@@ -61,7 +61,7 @@ while retries < MAX_RETRIES and not response_received:
     info(f"Enviando paquete {'RRQ' if operacion == 'read' else 'WRQ'} (intento {retries + 1})")
     sock.sendto(request_packet, server_addr)
     try:
-        data, server_addr = sock.recvfrom(1024)
+        data, server_addr = sock.recvfrom(516)
         response_received = True
     except socket.timeout:
         advertencia("Timeout esperando respuesta del servidor. Reintentando...")
@@ -101,7 +101,7 @@ if operacion == 'write':
                         sock.sendto(data_packet, server_addr)
                         info(f"📤 Enviado bloque {block_number} (intento {retries + 1})")
                         try:
-                            ack_data, _ = sock.recvfrom(1024)
+                            ack_data, _ = sock.recvfrom(516)
                             if len(ack_data) >= 4 and ack_data[1] == 5:
                                 error(f"TFTP ERROR ({ack_data[3]}): {ack_data[4:-1].decode(errors='replace')}")
                                 sock.close()
@@ -147,7 +147,7 @@ elif operacion == 'read':
                 retries = 0
                 while retries < MAX_RETRIES:
                     try:
-                        data, server_addr = sock.recvfrom(1024)
+                        data, server_addr = sock.recvfrom(516)
                         if len(data) >= 4 and data[1] == 5:
                             error(f"TFTP ERROR ({data[3]}): {data[4:-1].decode(errors='replace')}")
                             sock.close()

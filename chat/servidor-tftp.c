@@ -57,11 +57,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
 
     if (opcode == 2)
     { // WRQ
-        unsigned char ack[4] = {0, 4, 0, 0};
-        memcpy(last_ack, ack, 4);
-        sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
-        printf("ACK enviado al cliente (block 0)\n");
-
+        
         FILE *check = fopen(filename, "rb");
         if (check != NULL)
         {
@@ -70,7 +66,7 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             close(sockfd);
             exit(1);
         }
-
+        
         FILE *f = fopen(filename, "wb");
         if (!f)
         {
@@ -79,6 +75,11 @@ void handle_transfer(int opcode, char *filename, char *mode, struct sockaddr_in 
             close(sockfd);
             exit(1);
         }
+        
+        unsigned char ack[4] = {0, 4, 0, 0};
+        memcpy(last_ack, ack, 4);
+        sendto(sockfd, ack, 4, 0, (struct sockaddr *)&cliaddr, len);
+        printf("ACK enviado al cliente (block 0)\n");
 
         while (1)
         {
